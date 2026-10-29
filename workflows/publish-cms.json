@@ -1,0 +1,166 @@
+{
+  "id": "publishcms",
+  "name": "Publish to Sanity CMS (Stage 5)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "publish-cms",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "e0000000-0000-4000-8000-000000000001",
+      "name": "Publish (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 304],
+      "webhookId": "dddd4444-eeee-5555-ffff-666677778888"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the dashboard's publish request.\nconst input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\nbody = body || {};\nreturn [{ json: {\n  job_id: (body.job_id || '').toString(),\n  title: (body.title || '').toString(),\n  slug: (body.slug || '').toString(),\n  author: (body.author || '').toString(),\n  category: (body.category || '').toString(),\n  reading_time: Number(body.reading_time) || 5,\n  excerpt: (body.excerpt || '').toString(),\n  cover_alt: (body.cover_alt || '').toString(),\n  meta_title: (body.meta_title || '').toString(),\n  meta_description: (body.meta_description || '').toString()\n} }];"
+      },
+      "id": "e0000000-0000-4000-8000-000000000002",
+      "name": "Parse Webhook Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 304]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT cj.id, cj.topic, cj.draft_md, COALESCE(img.image_b64, gi.image_b64) AS image_b64, COALESCE(img.mime_type, gi.mime_type, 'image/png') AS mime_type FROM content_jobs cj LEFT JOIN images img ON img.id = cj.chosen_image_id LEFT JOIN generated_images gi ON gi.job_id = cj.id AND gi.is_chosen = TRUE WHERE cj.id = '{{ $json.job_id }}' LIMIT 1",
+        "options": {}
+      },
+      "id": "e0000000-0000-4000-8000-000000000003",
+      "name": "Get Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [656, 304],
+      "credentials": {
+        "postgres": { "id": "5AWMkUroR4Less3r", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convert markdown draft -> Portable Text and attach cover image as binary.\nconst job = $('Get Job').first().json;\nconst md = job.draft_md || '';\nconst newKey = () => '_k' + Math.random().toString(36).slice(2, 10);\nconst span = (text) => ({ _type: 'span', _key: newKey(), text, marks: [] });\nconst blk = (style, text) => ({ _type: 'block', _key: newKey(), style, markDefs: [], children: [span(text)] });\nconst li = (level, text, ordered) => ({ _type: 'block', _key: newKey(), style: 'normal', listItem: ordered ? 'number' : 'bullet', level, markDefs: [], children: [span(text)] });\nconst blocks = [];\nconst lines = md.split('\\n');\nlet i = 0;\nwhile (i < lines.length) {\n  const trimmed = (lines[i] || '').trim();\n  if (!trimmed) { i++; continue; }\n  let m;\n  if ((m = trimmed.match(/^(#{1,4})\\s+(.+)$/))) {\n    blocks.push(blk('h' + m[1].length, m[2].trim()));\n  } else if ((m = trimmed.match(/^[-*+]\\s+(.+)$/))) {\n    blocks.push(li(1, m[1].trim(), false));\n  } else if ((m = trimmed.match(/^\\d+\\.\\s+(.+)$/))) {\n    blocks.push(li(1, m[1].trim(), true));\n  } else {\n    let para = trimmed;\n    while (i + 1 < lines.length) {\n      const next = (lines[i + 1] || '').trim();\n      if (!next || /^#{1,4}\\s/.test(next) || /^[-*+]\\s/.test(next) || /^\\d+\\.\\s/.test(next)) break;\n      i++;\n      para += ' ' + next;\n    }\n    blocks.push(blk('normal', para));\n  }\n  i++;\n}\nconst mime = job.mime_type || 'image/png';\nconst ext = /jpeg|jpg/i.test(mime) ? 'jpg' : /webp/i.test(mime) ? 'webp' : 'png';\nconst item = { json: { body: blocks, has_image: !!job.image_b64 } };\nif (job.image_b64) {\n  const buf = Buffer.from(job.image_b64, 'base64');\n  item.binary = { cover: await this.helpers.prepareBinaryData(buf, 'cover.' + ext, mime) };\n}\nreturn [item];"
+      },
+      "id": "e0000000-0000-4000-8000-000000000004",
+      "name": "Convert Markdown to PT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [864, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://p9audgmp.api.sanity.io/v2024-01-01/assets/images/production",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "binaryData",
+        "inputDataFieldName": "cover",
+        "options": {}
+      },
+      "id": "e0000000-0000-4000-8000-000000000005",
+      "name": "Upload Cover Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1072, 304],
+      "continueOnFail": true,
+      "retryOnFail": false,
+      "credentials": {
+        "httpHeaderAuth": { "id": "REPLACE-WITH-SANITY-CRED-ID", "name": "Sanity Header Auth" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the Sanity mutation payload: createIfNotExists author + category\n// (idempotent, keyed by slugified name), then create the post itself.\nconst fields = $('Parse Webhook Input').first().json;\nconst body = $('Convert Markdown to PT').first().json.body;\nconst uploadResult = $input.first().json;\nconst assetId = (uploadResult && uploadResult.document && uploadResult.document._id) || '';\nconst slugify = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'item';\nconst authorSlug = slugify(fields.author);\nconst categorySlug = slugify(fields.category);\nconst mutations = [\n  { createIfNotExists: { _id: 'author-' + authorSlug, _type: 'author', name: fields.author || 'Unknown' } },\n  { createIfNotExists: { _id: 'category-' + categorySlug, _type: 'category', title: fields.category || 'Uncategorized' } },\n  { create: {\n    _type: 'post',\n    title: fields.title,\n    slug: { _type: 'slug', current: fields.slug || slugify(fields.title) },\n    author: { _type: 'reference', _ref: 'author-' + authorSlug },\n    category: { _type: 'reference', _ref: 'category-' + categorySlug },\n    readingTime: Number(fields.reading_time) || 5,\n    excerpt: fields.excerpt || '',\n    coverImage: assetId ? { _type: 'image', asset: { _type: 'reference', _ref: assetId }, alt: fields.cover_alt || '' } : undefined,\n    body,\n    metaTitle: fields.meta_title || '',\n    metaDescription: fields.meta_description || '',\n    publishedAt: new Date().toISOString()\n  } }\n];\nreturn [{ json: { mutations } }];"
+      },
+      "id": "e0000000-0000-4000-8000-000000000006",
+      "name": "Build Mutations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://p9audgmp.api.sanity.io/v2024-01-01/data/mutate/production",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ mutations: $json.mutations }) }}",
+        "options": {}
+      },
+      "id": "e0000000-0000-4000-8000-000000000007",
+      "name": "Submit Mutations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1488, 304],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": { "id": "REPLACE-WITH-SANITY-CRED-ID", "name": "Sanity Header Auth" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": { "__rl": true, "mode": "list", "value": "public" },
+        "table": { "__rl": true, "mode": "list", "value": "content_jobs" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Parse Webhook Input').first().json.job_id }}",
+            "status": "published",
+            "blog_url": "=https://project-digital-website.vercel.app/blog/{{ $('Parse Webhook Input').first().json.slug }}"
+          },
+          "matchingColumns": ["id"]
+        },
+        "options": {}
+      },
+      "id": "e0000000-0000-4000-8000-000000000008",
+      "name": "Update Job - Published",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1696, 304],
+      "credentials": {
+        "postgres": { "id": "5AWMkUroR4Less3r", "name": "Postgres account" }
+      }
+    }
+  ],
+  "connections": {
+    "Publish (Webhook)": {
+      "main": [[{ "node": "Parse Webhook Input", "type": "main", "index": 0 }]]
+    },
+    "Parse Webhook Input": {
+      "main": [[{ "node": "Get Job", "type": "main", "index": 0 }]]
+    },
+    "Get Job": {
+      "main": [[{ "node": "Convert Markdown to PT", "type": "main", "index": 0 }]]
+    },
+    "Convert Markdown to PT": {
+      "main": [[{ "node": "Upload Cover Image", "type": "main", "index": 0 }]]
+    },
+    "Upload Cover Image": {
+      "main": [[{ "node": "Build Mutations", "type": "main", "index": 0 }]]
+    },
+    "Build Mutations": {
+      "main": [[{ "node": "Submit Mutations", "type": "main", "index": 0 }]]
+    },
+    "Submit Mutations": {
+      "main": [[{ "node": "Update Job - Published", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

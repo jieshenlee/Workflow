@@ -1,0 +1,249 @@
+{
+  "id": "uploadblog001",
+  "name": "Upload Blog (.docx path — Stage 4 onwards)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upload-blog",
+        "options": {}
+      },
+      "id": "d0000001-0000-4000-8000-000000000001",
+      "name": "Start (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "d1111111-1111-4111-8111-111111111111"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\nbody = body || {};\nconst topic = (body.topic || '').toString().trim() || 'Untitled';\nconst draft_md = (body.draft_md || '').toString().trim();\nconst words = draft_md.split(/\\s+/).filter(Boolean);\nconst draft_excerpt = words.slice(0, 60).join(' ') + (words.length > 60 ? '…' : '');\nreturn [{ json: { topic, draft_md, draft_excerpt } }];"
+      },
+      "id": "d0000002-0000-4000-8000-000000000002",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 300]
+    },
+    {
+      "parameters": {
+        "schema": {"__rl": true, "mode": "list", "value": "public"},
+        "table": {"__rl": true, "mode": "list", "value": "content_jobs"},
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $json.topic }}",
+            "branch": "blog",
+            "status": "image",
+            "draft_md": "={{ $json.draft_md }}",
+            "n8n_execution_id": "={{ $execution.id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "d0000003-0000-4000-8000-000000000003",
+      "name": "Save Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [656, 300],
+      "credentials": {"postgres": {"id": "5AWMkUroR4Less3r", "name": "Postgres account"}}
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "anthropic-version", "value": "2023-06-01"}]},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-haiku-4-5-20251001\",\"max_tokens\":600,\"system\":\"You are an art director for a content studio. Write a vivid, specific image-generation prompt for a 16:9 blog hero image. Editorial photography or clean illustration. No text, no logos. Include composition cues (subject, lighting, mood, palette). Return JSON only.\",\"messages\":[{\"role\":\"user\",\"content\":{{ JSON.stringify('Topic: ' + $('Parse Input').first().json.topic + '\\n\\nBlog excerpt:\\n' + $('Parse Input').first().json.draft_excerpt + '\\n\\nReturn JSON: { \"prompt\": string (50-150 words), \"style\": string }') }}}]}",
+        "options": {}
+      },
+      "id": "d0000004-0000-4000-8000-000000000004",
+      "name": "Claude - Image Prompt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [864, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {"httpHeaderAuth": {"id": "h9HojADDLPyDuAp8", "name": "Header Auth account"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '';\nlet txt = raw.trim();\nif (txt.startsWith('```')) { txt = txt.substring(txt.indexOf('\\n') + 1); if (txt.endsWith('```')) txt = txt.slice(0, -3); txt = txt.trim(); }\nlet parsed;\ntry { parsed = JSON.parse(txt); } catch (e) { parsed = { prompt: txt, style: '' }; }\nconst job_id = $('Save Job').first().json.id;\nreturn [{ json: { job_id, prompt: parsed.prompt || txt, style: parsed.style || '' } }];"
+      },
+      "id": "d0000005-0000-4000-8000-000000000005",
+      "name": "Parse Image Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1072, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{}]},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"instances\":[{\"prompt\":{{ JSON.stringify($json.prompt) }}}],\"parameters\":{\"sampleCount\":1,\"aspectRatio\":\"16:9\",\"personGeneration\":\"allow_adult\",\"safetyFilterLevel\":\"block_low_and_above\"}}",
+        "options": {}
+      },
+      "id": "d0000006-0000-4000-8000-000000000006",
+      "name": "Gemini - Imagen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1280, 300],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "credentials": {"httpHeaderAuth": {"id": "v6vqS7OMCUeZLF89", "name": "Header Auth account 2"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst predictions = res.predictions || [];\nconst first = predictions[0] || {};\nconst image_b64 = first.bytesBase64Encoded || '';\nconst mime_type = first.mimeType || 'image/png';\nif (!image_b64) { throw new Error('No image in Gemini response: ' + JSON.stringify(res).slice(0, 500)); }\nconst job_id = $('Parse Image Prompt').first().json.job_id;\nconst prompt = $('Parse Image Prompt').first().json.prompt;\nreturn [{ json: { job_id, prompt, image_b64, mime_type } }];"
+      },
+      "id": "d0000007-0000-4000-8000-000000000007",
+      "name": "Parse Image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1488, 300]
+    },
+    {
+      "parameters": {
+        "schema": {"__rl": true, "mode": "list", "value": "public"},
+        "table": {"__rl": true, "mode": "list", "value": "generated_images"},
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $json.job_id }}",
+            "prompt": "={{ $json.prompt }}",
+            "image_b64": "={{ $json.image_b64 }}",
+            "mime_type": "={{ $json.mime_type }}",
+            "is_chosen": true,
+            "generated_by": "imagen-4.0-generate-001"
+          }
+        },
+        "options": {}
+      },
+      "id": "d0000008-0000-4000-8000-000000000008",
+      "name": "Save Image",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1696, 300],
+      "credentials": {"postgres": {"id": "5AWMkUroR4Less3r", "name": "Postgres account"}}
+    },
+    {
+      "parameters": {
+        "schema": {"__rl": true, "mode": "list", "value": "public"},
+        "table": {"__rl": true, "mode": "list", "value": "approval_stages"},
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $('Parse Image').first().json.job_id }}",
+            "stage_number": "4",
+            "stage_name": "Image",
+            "content": "={{ JSON.stringify({ image_id: $('Save Image').first().json.id, prompt: $('Parse Image').first().json.prompt }) }}",
+            "status": "pending",
+            "resume_url": "={{ $execution.resumeUrl }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "d0000009-0000-4000-8000-000000000009",
+      "name": "Insert Approval (Stage 4)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1904, 300],
+      "credentials": {"postgres": {"id": "5AWMkUroR4Less3r", "name": "Postgres account"}}
+    },
+    {
+      "parameters": {"resume": "webhook", "httpMethod": "POST", "options": {}},
+      "id": "d000000a-0000-4000-8000-00000000000a",
+      "name": "Wait for Image Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2112, 300],
+      "webhookId": "d2222222-2222-4222-8222-222222222222"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\nbody = body || {};\nconst image_notes = (body.image_notes || body.notes || body.feedback || '').toString();\nconst job_id = $('Parse Image').first().json.job_id;\nreturn [{ json: { job_id, image_notes } }];"
+      },
+      "id": "d000000b-0000-4000-8000-00000000000b",
+      "name": "Parse Stage4 Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2320, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {"__rl": true, "mode": "list", "value": "public"},
+        "table": {"__rl": true, "mode": "list", "value": "approval_stages"},
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $json.job_id }}",
+            "stage_number": "4",
+            "status": "approved",
+            "feedback": "={{ $json.image_notes }}",
+            "reviewed_at": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": ["job_id", "stage_number"]
+        },
+        "options": {}
+      },
+      "id": "d000000c-0000-4000-8000-00000000000c",
+      "name": "Close Stage4 Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [2528, 300],
+      "credentials": {"postgres": {"id": "5AWMkUroR4Less3r", "name": "Postgres account"}}
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {"__rl": true, "mode": "list", "value": "public"},
+        "table": {"__rl": true, "mode": "list", "value": "content_jobs"},
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Parse Stage4 Approval').first().json.job_id }}",
+            "status": "cms"
+          },
+          "matchingColumns": ["id"]
+        },
+        "options": {}
+      },
+      "id": "d000000d-0000-4000-8000-00000000000d",
+      "name": "Advance to CMS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [2736, 300],
+      "credentials": {"postgres": {"id": "5AWMkUroR4Less3r", "name": "Postgres account"}}
+    }
+  ],
+  "connections": {
+    "Start (Webhook)": {"main": [[{"node": "Parse Input", "type": "main", "index": 0}]]},
+    "Parse Input": {"main": [[{"node": "Save Job", "type": "main", "index": 0}]]},
+    "Save Job": {"main": [[{"node": "Claude - Image Prompt", "type": "main", "index": 0}]]},
+    "Claude - Image Prompt": {"main": [[{"node": "Parse Image Prompt", "type": "main", "index": 0}]]},
+    "Parse Image Prompt": {"main": [[{"node": "Gemini - Imagen", "type": "main", "index": 0}]]},
+    "Gemini - Imagen": {"main": [[{"node": "Parse Image", "type": "main", "index": 0}]]},
+    "Parse Image": {"main": [[{"node": "Save Image", "type": "main", "index": 0}]]},
+    "Save Image": {"main": [[{"node": "Insert Approval (Stage 4)", "type": "main", "index": 0}]]},
+    "Insert Approval (Stage 4)": {"main": [[{"node": "Wait for Image Approval", "type": "main", "index": 0}]]},
+    "Wait for Image Approval": {"main": [[{"node": "Parse Stage4 Approval", "type": "main", "index": 0}]]},
+    "Parse Stage4 Approval": {"main": [[{"node": "Close Stage4 Approval", "type": "main", "index": 0}]]},
+    "Close Stage4 Approval": {"main": [[{"node": "Advance to CMS", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "tags": []
+}

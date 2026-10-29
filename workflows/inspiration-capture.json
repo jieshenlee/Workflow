@@ -1,0 +1,238 @@
+{
+  "id": "inspirationcapture",
+  "name": "Inspiration Capture (Dashboard upload -> AI tags -> inspiration_items)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inspiration-upload",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ic100000-0000-4000-8000-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 480],
+      "webhookId": "cc113344-aaaa-4444-bbbb-ccdd00112244"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json;\nconst d = (raw.body && raw.body.file_b64 !== undefined) ? raw.body : raw;\nreturn [{ json: {\n  type: (d.type === 'video') ? 'video' : 'image',\n  file_b64: d.file_b64 || '',\n  mime_type: d.mime_type || 'image/jpeg',\n  caption: d.caption || '',\n  preview_b64: d.preview_b64 || null,\n  preview_mime_type: d.preview_mime_type || null\n} }];"
+      },
+      "id": "ic100000-0000-4000-8000-000000000002",
+      "name": "Prepare Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 480]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "ic1cond01",
+              "leftValue": "={{ $json.type }}",
+              "rightValue": "image",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ic100000-0000-4000-8000-000000000003",
+      "name": "Is Image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [680, 480]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-haiku-4-5-20251001\",\"max_tokens\":500,\"system\":[{\"type\":\"text\",\"text\":\"You catalog trending social content as inspiration for a content studio. Always return ONLY valid JSON, no markdown fences, no commentary.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":{{ JSON.stringify($json.mime_type) }},\"data\":{{ JSON.stringify($json.file_b64) }}}},{\"type\":\"text\",\"text\":{{ JSON.stringify('Caption or context (may be empty): ' + ($json.caption || '(none)') + '. Classify this image into exactly one category from: tv_shows, streaming, gadgets, tools, games, movies, ai, anime, esports, other. Write a 1-2 sentence summary of what makes it trending or engaging and what content idea it suggests. List 3-5 short lowercase tags. Return ONLY valid JSON with exactly these keys: category, summary, tags.') }}}]}]}",
+        "options": {}
+      },
+      "id": "ic100000-0000-4000-8000-000000000008",
+      "name": "Claude Vision - Tag Photo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 280],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": { "id": "h9HojADDLPyDuAp8", "name": "Header Auth account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '{}';\nlet txt = raw.trim();\nif (txt.startsWith('```')) { txt = txt.substring(txt.indexOf('\\n') + 1); if (txt.endsWith('```')) txt = txt.slice(0, -3); txt = txt.trim(); }\nlet parsed = {};\ntry { parsed = JSON.parse(txt); } catch (e) { parsed = {}; }\n\nconst allowed = ['tv_shows','streaming','gadgets','tools','games','movies','ai','anime','esports','other'];\nconst category = allowed.includes(parsed.category) ? parsed.category : 'other';\nconst summary = (parsed.summary || '').toString();\nconst tags = Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5).map(t => String(t)) : [];\n\nconst prep = $('Prepare Data').first().json;\nreturn [{ json: {\n  category, summary, tags,\n  caption: prep.caption,\n  preview_b64: prep.file_b64,\n  preview_mime_type: prep.mime_type\n} }];"
+      },
+      "id": "ic100000-0000-4000-8000-000000000009",
+      "name": "Parse Photo Tags",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 280]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": { "__rl": true, "mode": "list", "value": "public" },
+        "table": { "__rl": true, "mode": "list", "value": "inspiration_items" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "type": "image",
+            "category": "={{ $json.category }}",
+            "source_caption": "={{ $json.caption }}",
+            "preview_b64": "={{ $json.preview_b64 }}",
+            "preview_mime_type": "={{ $json.preview_mime_type }}",
+            "ai_summary": "={{ $json.summary }}",
+            "ai_tags": "={{ $json.tags }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "ic100000-0000-4000-8000-00000000000a",
+      "name": "Save Photo Inspiration",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1340, 280],
+      "credentials": {
+        "postgres": { "id": "5AWMkUroR4Less3r", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, category: $('Parse Photo Tags').first().json.category, summary: $('Parse Photo Tags').first().json.summary }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "ic100000-0000-4000-8000-00000000000b",
+      "name": "Respond Photo OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1560, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"contents\":[{\"parts\":[{\"text\":{{ JSON.stringify('Caption or context (may be empty): ' + ($json.caption || '(none)') + '. This is a short trending video clip. Classify it into exactly one category from: tv_shows, streaming, gadgets, tools, games, movies, ai, anime, esports, other. Write a 1-2 sentence summary of the hook or idea that makes it engaging and what content angle it suggests. List 3-5 short lowercase tags. Return ONLY valid JSON with exactly these keys: category, summary, tags.') }}},{\"inlineData\":{\"mimeType\":{{ JSON.stringify($json.mime_type) }},\"data\":{{ JSON.stringify($json.file_b64) }}}}]}]}",
+        "options": {}
+      },
+      "id": "ic100000-0000-4000-8000-000000000010",
+      "name": "Gemini Video Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 680],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": { "id": "GEMINI_CRED_ID_HERE", "name": "Gemini API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst parts = (res.candidates && res.candidates[0] && res.candidates[0].content && res.candidates[0].content.parts) || [];\nconst raw = (parts[0] && parts[0].text) ? parts[0].text : '{}';\nlet txt = raw.trim();\nif (txt.startsWith('```')) { txt = txt.substring(txt.indexOf('\\n') + 1); if (txt.endsWith('```')) txt = txt.slice(0, -3); txt = txt.trim(); }\nlet parsed = {};\ntry { parsed = JSON.parse(txt); } catch (e) { parsed = {}; }\n\nconst allowed = ['tv_shows','streaming','gadgets','tools','games','movies','ai','anime','esports','other'];\nconst category = allowed.includes(parsed.category) ? parsed.category : 'other';\nconst summary = (parsed.summary || '').toString();\nconst tags = Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5).map(t => String(t)) : [];\n\nconst prep = $('Prepare Data').first().json;\nreturn [{ json: {\n  category, summary, tags,\n  caption: prep.caption,\n  preview_b64: prep.preview_b64,\n  preview_mime_type: prep.preview_mime_type\n} }];"
+      },
+      "id": "ic100000-0000-4000-8000-000000000011",
+      "name": "Parse Video Tags",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 680]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": { "__rl": true, "mode": "list", "value": "public" },
+        "table": { "__rl": true, "mode": "list", "value": "inspiration_items" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "type": "video",
+            "category": "={{ $json.category }}",
+            "source_caption": "={{ $json.caption }}",
+            "preview_b64": "={{ $json.preview_b64 }}",
+            "preview_mime_type": "={{ $json.preview_mime_type }}",
+            "ai_summary": "={{ $json.summary }}",
+            "ai_tags": "={{ $json.tags }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "ic100000-0000-4000-8000-000000000012",
+      "name": "Save Video Inspiration",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1340, 680],
+      "credentials": {
+        "postgres": { "id": "5AWMkUroR4Less3r", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, category: $('Parse Video Tags').first().json.category, summary: $('Parse Video Tags').first().json.summary }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "ic100000-0000-4000-8000-000000000013",
+      "name": "Respond Video OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1560, 680]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Prepare Data", "type": "main", "index": 0 }]]
+    },
+    "Prepare Data": {
+      "main": [[{ "node": "Is Image?", "type": "main", "index": 0 }]]
+    },
+    "Is Image?": {
+      "main": [
+        [{ "node": "Claude Vision - Tag Photo", "type": "main", "index": 0 }],
+        [{ "node": "Gemini Video Analysis", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude Vision - Tag Photo": {
+      "main": [[{ "node": "Parse Photo Tags", "type": "main", "index": 0 }]]
+    },
+    "Parse Photo Tags": {
+      "main": [[{ "node": "Save Photo Inspiration", "type": "main", "index": 0 }]]
+    },
+    "Save Photo Inspiration": {
+      "main": [[{ "node": "Respond Photo OK", "type": "main", "index": 0 }]]
+    },
+    "Gemini Video Analysis": {
+      "main": [[{ "node": "Parse Video Tags", "type": "main", "index": 0 }]]
+    },
+    "Parse Video Tags": {
+      "main": [[{ "node": "Save Video Inspiration", "type": "main", "index": 0 }]]
+    },
+    "Save Video Inspiration": {
+      "main": [[{ "node": "Respond Video OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

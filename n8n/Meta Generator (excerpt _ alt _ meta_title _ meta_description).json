@@ -1,0 +1,192 @@
+{
+  "name": "Meta Generator (excerpt / alt / meta_title / meta_description)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-meta",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "d0000000-0000-4000-8000-000000000001",
+      "name": "Generate Meta (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        304
+      ],
+      "webhookId": "cccc3333-dddd-4444-eeee-555566667777"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the dashboard's generate request (object-or-string body).\nconst input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\nbody = body || {};\nconst job_id = (body.job_id || '').toString();\nconst field = (body.field || 'excerpt').toString();\nconst ALLOWED = ['excerpt', 'alt', 'meta_title', 'meta_description'];\nreturn [{ json: { job_id, field: ALLOWED.indexOf(field) >= 0 ? field : 'excerpt' } }];"
+      },
+      "id": "d0000000-0000-4000-8000-000000000002",
+      "name": "Parse Webhook Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT cj.id, cj.topic, cj.chosen_angle, cj.draft_md, COALESCE(img.prompt, gi.prompt) AS image_prompt FROM content_jobs cj LEFT JOIN images img ON img.id = cj.chosen_image_id LEFT JOIN generated_images gi ON gi.job_id = cj.id AND gi.is_chosen = TRUE WHERE cj.id = '{{ $json.job_id }}' LIMIT 1",
+        "options": {}
+      },
+      "id": "d0000000-0000-4000-8000-000000000003",
+      "name": "Get Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        656,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the system + user prompt for the requested field.\nconst field = $('Parse Webhook Input').first().json.field;\nconst job = $('Get Job').first().json;\n\nconst SYSTEM = {\n  excerpt: 'You write conversational blog excerpts. 150-160 characters. Hook the reader and summarize the angle in one tight sentence. Return ONLY JSON in this shape: {\"excerpt\":\"...\"} - no code fences, no commentary.',\n  alt: 'You write concise descriptive alt text for blog cover images. Under 100 characters. Describe what is visually in the image. Return ONLY JSON in this shape: {\"alt\":\"...\"} - no code fences, no commentary.',\n  meta_title: 'You write SEO meta titles. 50-60 characters. Include the main keyword naturally. Avoid clickbait. Return ONLY JSON in this shape: {\"meta_title\":\"...\"} - no code fences, no commentary.',\n  meta_description: 'You write SEO meta descriptions. 150-160 characters. Include the main keyword and a soft CTA. Return ONLY JSON in this shape: {\"meta_description\":\"...\"} - no code fences, no commentary.'\n};\n\nfunction buildUser(field, job) {\n  const topic = job.topic || '';\n  const angle = job.chosen_angle || '';\n  const draft = (job.draft_md || '').slice(0, 2000);\n  const imgPrompt = job.image_prompt || '';\n  if (field === 'alt') {\n    return 'Topic: ' + topic + '\\nImage prompt: ' + imgPrompt;\n  }\n  if (field === 'meta_description') {\n    return 'Topic: ' + topic + '\\nAngle: ' + angle + '\\nDraft excerpt:\\n' + draft.slice(0, 600);\n  }\n  return 'Topic: ' + topic + '\\nAngle: ' + angle + '\\nDraft (start):\\n' + draft;\n}\n\nreturn [{ json: { field, system: SYSTEM[field] || SYSTEM.excerpt, user: buildUser(field, job) } }];"
+      },
+      "id": "d0000000-0000-4000-8000-000000000004",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-haiku-4-5-20251001\",\"max_tokens\":400,\"system\":[{\"type\":\"text\",\"text\":{{ JSON.stringify($json.system) }}}],\"messages\":[{\"role\":\"user\",\"content\":{{ JSON.stringify($json.user) }}}]}",
+        "options": {}
+      },
+      "id": "d0000000-0000-4000-8000-000000000005",
+      "name": "Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1072,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "h9HojADDLPyDuAp8",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Claude's JSON, extract the requested field, return as { [field]: value }.\nconst res = $input.first().json;\nconst raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '';\nlet txt = raw.trim();\nif (txt.startsWith('```')) {\n  txt = txt.substring(txt.indexOf('\\n') + 1);\n  if (txt.endsWith('```')) txt = txt.slice(0, -3);\n  txt = txt.trim();\n}\nlet parsed = {};\ntry { parsed = JSON.parse(txt); } catch (e) { parsed = { error: e.message, raw }; }\nconst field = $('Parse Webhook Input').first().json.field;\nconst value = parsed[field] || '';\n// With responseMode 'lastNode' the dashboard sees this object as the webhook response.\nreturn [{ json: { [field]: value } }];"
+      },
+      "id": "d0000000-0000-4000-8000-000000000006",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        304
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Generate Meta (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Parse Webhook Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Webhook Input": {
+      "main": [
+        [
+          {
+            "node": "Get Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Job": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude": {
+      "main": [
+        [
+          {
+            "node": "Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "3d6b26c7-a613-45f5-be25-d1d04b829ee3",
+  "meta": {
+    "instanceId": "f9eb311d13df2d420f98ccbd585326d13017fbd9b15c20d6aaf7534345b8d29c"
+  },
+  "id": "generatemeta",
+  "tags": []
+}

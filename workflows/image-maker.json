@@ -1,0 +1,108 @@
+{
+  "id": "imagemaker",
+  "name": "Image Maker (reference image + instruction -> edited image + slogans)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "image-maker",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "im300000-0000-4000-8000-000000000001",
+      "name": "Image Maker (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 304],
+      "webhookId": "bb001122-cccc-4444-dddd-eeff00112266"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\nbody = body || {};\nconst instruction = (body.instruction || '').toString().trim();\nconst reference_image_b64 = (body.reference_image_b64 || '').toString();\nconst reference_mime_type = (body.reference_mime_type || 'image/jpeg').toString();\nif (!instruction) throw new Error('instruction is required');\nif (!reference_image_b64) throw new Error('reference_image_b64 is required');\nconst slogan_user = 'Write exactly 3 short punchy slogans (under 10 words each, tonally distinct) for this post: \"' + instruction + '\". Return ONLY valid JSON, no markdown fences, in this shape: {\"slogans\":[\"...\",\"...\",\"...\"]}';\nreturn [{ json: { instruction, reference_image_b64, reference_mime_type, slogan_user } }];"
+      },
+      "id": "im300000-0000-4000-8000-000000000002",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"contents\":[{\"parts\":[{\"text\":{{ JSON.stringify($json.instruction) }}},{\"inlineData\":{\"mimeType\":{{ JSON.stringify($json.reference_mime_type) }},\"data\":{{ JSON.stringify($json.reference_image_b64) }}}}]}],\"generationConfig\":{\"responseModalities\":[\"IMAGE\",\"TEXT\"]}}",
+        "options": {}
+      },
+      "id": "im300000-0000-4000-8000-000000000003",
+      "name": "Gemini Image Edit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [656, 304],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": { "id": "GEMINI_CRED_ID_HERE", "name": "Gemini API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-haiku-4-5-20251001\",\"max_tokens\":400,\"system\":[{\"type\":\"text\",\"text\":\"You write short punchy social captions. Return ONLY valid JSON with no markdown fences or commentary.\"}],\"messages\":[{\"role\":\"user\",\"content\":{{ JSON.stringify($('Parse Input').first().json.slogan_user) }}}]}",
+        "options": {}
+      },
+      "id": "im300000-0000-4000-8000-000000000004",
+      "name": "Claude Slogans",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [864, 304],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": { "id": "h9HojADDLPyDuAp8", "name": "Header Auth account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const gemini_res = $('Gemini Image Edit').first().json;\nconst claude_res = $input.first().json;\n\nlet image_b64 = '';\nlet mime_type = 'image/png';\nconst candidates = gemini_res.candidates || [];\nconst parts = (candidates[0] && candidates[0].content && candidates[0].content.parts) || [];\nfor (const part of parts) {\n  if (part.inlineData && part.inlineData.data) {\n    image_b64 = part.inlineData.data;\n    mime_type = part.inlineData.mimeType || 'image/png';\n    break;\n  }\n}\nif (!image_b64) throw new Error('Gemini returned no image — check your Gemini credential, billing, and model availability');\n\nconst raw = (claude_res.content && claude_res.content[0] && claude_res.content[0].text) ? claude_res.content[0].text : '{}';\nlet txt = raw.trim();\nif (txt.startsWith('```')) { txt = txt.substring(txt.indexOf('\\n') + 1); if (txt.endsWith('```')) txt = txt.slice(0, -3); txt = txt.trim(); }\nlet sd = {};\ntry { sd = JSON.parse(txt); } catch(e) { sd = { slogans: [] }; }\nconst slogans = Array.isArray(sd.slogans) ? sd.slogans.slice(0, 3) : [];\n\nreturn [{ json: { ok: true, image_b64, mime_type, slogans } }];"
+      },
+      "id": "im300000-0000-4000-8000-000000000005",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1072, 304]
+    }
+  ],
+  "connections": {
+    "Image Maker (Webhook)": {
+      "main": [[{ "node": "Parse Input", "type": "main", "index": 0 }]]
+    },
+    "Parse Input": {
+      "main": [[{ "node": "Gemini Image Edit", "type": "main", "index": 0 }]]
+    },
+    "Gemini Image Edit": {
+      "main": [[{ "node": "Claude Slogans", "type": "main", "index": 0 }]]
+    },
+    "Claude Slogans": {
+      "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

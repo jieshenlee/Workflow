@@ -1,0 +1,82 @@
+{
+  "id": "imagecheck",
+  "name": "Image Checker (image + request brief -> summary, grammar check, match verdict)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "image-check",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "ck400000-0000-4000-8000-000000000001",
+      "name": "Image Check (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 304],
+      "webhookId": "dd224466-eeee-4444-ffff-001122334455"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\nbody = body || {};\nconst request_text = (body.request_text || '').toString().trim();\nconst image_b64 = (body.image_b64 || '').toString();\nconst mime_type = (body.mime_type || 'image/jpeg').toString();\nif (!request_text) throw new Error('request_text is required');\nif (!image_b64) throw new Error('image_b64 is required');\nconst check_prompt = 'You are a pre-send quality check for a solo content creator who sends finished images out against different requests/briefs. What was requested: \"' + request_text + '\". Look at the attached image and do all of the following: (1) write a 1-2 sentence summary of what is actually shown in the image; (2) transcribe any text/words visibly baked into the image into extracted_text (use an empty string if there is none); (3) if extracted_text is non-empty, list every spelling or grammar mistake in it as an array of objects with \"issue\" and \"suggestion\" keys (use an empty array if there is no text or no mistakes); (4) decide a verdict of exactly one of \"match\", \"partial_match\", or \"mismatch\" for whether this image actually fulfills what was requested, and write a 1-2 sentence verdict_reason explaining why - this last step exists specifically to catch the wrong image being sent for the wrong request. Return ONLY valid JSON, no markdown fences, no commentary, with exactly these keys: summary, extracted_text, grammar_issues, verdict, verdict_reason.';\nreturn [{ json: { request_text, image_b64, mime_type, check_prompt } }];"
+      },
+      "id": "ck400000-0000-4000-8000-000000000002",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-sonnet-4-6\",\"max_tokens\":900,\"system\":[{\"type\":\"text\",\"text\":\"You are a meticulous pre-send QC reviewer for a content studio. Always return ONLY valid JSON, no markdown fences, no commentary.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":{{ JSON.stringify($json.mime_type) }},\"data\":{{ JSON.stringify($json.image_b64) }}}},{\"type\":\"text\",\"text\":{{ JSON.stringify($json.check_prompt) }}}]}]}",
+        "options": {}
+      },
+      "id": "ck400000-0000-4000-8000-000000000003",
+      "name": "Claude Vision Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [656, 304],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": { "id": "h9HojADDLPyDuAp8", "name": "Header Auth account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '{}';\nlet txt = raw.trim();\nif (txt.startsWith('```')) { txt = txt.substring(txt.indexOf('\\n') + 1); if (txt.endsWith('```')) txt = txt.slice(0, -3); txt = txt.trim(); }\nlet parsed = {};\ntry { parsed = JSON.parse(txt); } catch (e) { parsed = {}; }\n\nconst summary = (parsed.summary || '').toString();\nconst extracted_text = (parsed.extracted_text || '').toString();\nconst grammar_issues = Array.isArray(parsed.grammar_issues) ? parsed.grammar_issues : [];\nconst allowedVerdicts = ['match', 'partial_match', 'mismatch'];\nconst verdict = allowedVerdicts.includes(parsed.verdict) ? parsed.verdict : 'partial_match';\nconst verdict_reason = (parsed.verdict_reason || '').toString();\n\nreturn [{ json: { ok: true, summary, extracted_text, grammar_issues, verdict, verdict_reason } }];"
+      },
+      "id": "ck400000-0000-4000-8000-000000000004",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [864, 304]
+    }
+  ],
+  "connections": {
+    "Image Check (Webhook)": {
+      "main": [[{ "node": "Parse Input", "type": "main", "index": 0 }]]
+    },
+    "Parse Input": {
+      "main": [[{ "node": "Claude Vision Check", "type": "main", "index": 0 }]]
+    },
+    "Claude Vision Check": {
+      "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

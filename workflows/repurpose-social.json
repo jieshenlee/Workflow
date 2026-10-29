@@ -1,0 +1,276 @@
+{
+  "id": "repurposesocial",
+  "name": "Social Path - Repurpose Blog to Posts (Stage 5)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "repurpose-social",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "c0000000-0000-4000-8000-000000000001",
+      "name": "Repurpose (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 304],
+      "webhookId": "aaaa1111-bbbb-2222-cccc-333344445555"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\nbody = body || {};\nconst job_id = (body.job_id || '').toString();\nconst platforms = (Array.isArray(body.platforms) && body.platforms.length) ? body.platforms : ['linkedin', 'x', 'instagram'];\nconst content_type = (body.content_type || 'static').toString();\nreturn [{ json: { job_id, platforms, content_type } }];"
+      },
+      "id": "c0000000-0000-4000-8000-000000000002",
+      "name": "Parse Webhook Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 304]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id, topic, chosen_angle, draft_md, blog_url, shortlink FROM content_jobs WHERE id = '{{ $json.job_id }}'",
+        "options": {}
+      },
+      "id": "c0000000-0000-4000-8000-000000000003",
+      "name": "Get Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [656, 304],
+      "credentials": {
+        "postgres": { "id": "5AWMkUroR4Less3r", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://tinyurl.com/api-create.php",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $('Get Job').first().json.blog_url || '' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "c0000000-0000-4000-8000-00000000000d",
+      "name": "Shorten URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [864, 304],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $('Get Job').first().json;\nconst ct = $('Parse Webhook Input').first().json.content_type || 'static';\nconst platforms = $('Parse Webhook Input').first().json.platforms || ['linkedin', 'x', 'instagram'];\n\n// Prefer DB-stored shortlink, fall back to fresh TinyURL result.\nlet shortLink = (job.shortlink || '').trim();\nif (!shortLink) {\n  try {\n    const td = ($('Shorten URL').first().json.data || '').trim();\n    if (td.startsWith('http')) shortLink = td;\n  } catch (e) {}\n}\n\nconst SYSTEM = {\n  linkedin: 'You write LinkedIn copy for Project Digital. 1300-1900 characters. First 2 lines are the hook. Short paragraphs, generous line breaks. 3-5 hashtags at end. Professional but human, 0-3 emoji. CTA is mandatory: LinkedIn suppresses reach for outbound links in the post body — do NOT paste the URL in the body. End the body with the exact line: Full breakdown → first comment ↓. Return the short link as first_comment_link in the JSON. Return ONLY a JSON object, no code fences: { \"platform\": \"linkedin\", \"is_article\": false, \"hook\": \"\", \"body\": \"\", \"hashtags\": [], \"char_count\": 0, \"first_comment_link\": \"\" }',\n  x: 'You write X (Twitter) copy for Project Digital. CTA mandatory: always end the single post with the short link. Single post must be ≤280 chars including the link. Also give a 3-5 tweet thread: tweet 1 is a hook with an open loop, the last tweet has the CTA and the short link. Sharp, confident, 0-2 hashtags. Return ONLY a JSON object, no code fences: { \"platform\": \"x\", \"single_post\": \"\", \"thread\": [], \"hashtags\": [], \"link\": \"\" }',\n  instagram: 'You write Instagram captions for Project Digital. 125-600 visible characters, hook in the first line, warm and conversational, purposeful emoji. CTA mandatory: include the line \"Full read → link in bio 🔗\" near the end — Instagram has no clickable in-caption links. End with one engagement prompt. 8-15 hashtags (broad and niche). Return the short link as link_in_bio in the JSON. Return ONLY a JSON object, no code fences: { \"platform\": \"instagram\", \"content_type\": \"static\", \"caption\": \"\", \"engagement_prompt\": \"\", \"hashtags\": [], \"link_in_bio\": \"\", \"carousel_slides\": [], \"reel_onscreen_hook\": \"\" }',\n  facebook: 'You write Facebook copy for Project Digital. 400-600 characters, conversational relatable opener. CTA mandatory: end the post with the short link on its own line. 0-2 emoji, 0-3 hashtags. Return ONLY a JSON object, no code fences: { \"platform\": \"facebook\", \"body\": \"\", \"link\": \"\", \"engagement_prompt\": \"\", \"hashtags\": [] }',\n  threads: 'You write Threads copy for Project Digital. ≤500 characters, conversational, invites replies. CTA mandatory: end with the short link on its own line. 0-1 hashtags. Return ONLY a JSON object, no code fences: { \"platform\": \"threads\", \"post\": \"\", \"continuation\": [], \"link\": \"\" }',\n  pinterest: 'You write Pinterest Pin copy for Project Digital. Pin title ≤100 chars, keyword-forward, benefit-driven. Pin description 150-500 chars with natural keywords, ending with \"Read the full guide →\" followed by the short link. 3-6 hashtags. Set the short link as destination_url. Return ONLY a JSON object, no code fences: { \"platform\": \"pinterest\", \"pin_title\": \"\", \"pin_description\": \"\", \"destination_url\": \"\", \"hashtags\": [] }',\n  tiktok: 'You write TikTok copy for Project Digital. Caption ≤150 characters, punchy lowercase-casual. CTA mandatory: end caption with \"full guide → link in bio\". On-screen hook ≤8 words. Provide 3-5 beat script outline. Return the short link as link_in_bio. Return ONLY a JSON object, no code fences: { \"platform\": \"tiktok\", \"onscreen_hook\": \"\", \"caption\": \"\", \"hashtags\": [], \"script_beats\": [], \"sound_style\": \"\", \"link_in_bio\": \"\" }'\n};\n\nconst user = 'Topic: ' + (job.topic || '') + '\\nAngle: ' + (job.chosen_angle || '') + '\\nContent type: ' + ct + '\\nShort link: ' + shortLink + '\\n\\nBlog draft:\\n' + (job.draft_md || '');\n\nreturn platforms.map(function(p) { return { json: { platform: p, system: SYSTEM[p] || SYSTEM.instagram, user: user } }; });"
+      },
+      "id": "c0000000-0000-4000-8000-000000000004",
+      "name": "Build Caption Tasks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1072, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-sonnet-4-6\",\"max_tokens\":1500,\"system\":[{\"type\":\"text\",\"text\":{{ JSON.stringify($json.system) }}}],\"messages\":[{\"role\":\"user\",\"content\":{{ JSON.stringify($json.user) }}}]}",
+        "options": {}
+      },
+      "id": "c0000000-0000-4000-8000-000000000005",
+      "name": "Claude - Caption",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1280, 304],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": { "id": "h9HojADDLPyDuAp8", "name": "Header Auth account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const tasks = $('Build Caption Tasks').all();\nconst job_id = $('Get Job').first().json.id;\nreturn $input.all().map(function(item, i) {\n  const res = item.json;\n  const raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '';\n  let txt = raw.trim();\n  if (txt.startsWith('```')) {\n    txt = txt.substring(txt.indexOf('\\n') + 1);\n    if (txt.endsWith('```')) txt = txt.slice(0, -3);\n    txt = txt.trim();\n  }\n  let captionJson;\n  try { captionJson = JSON.parse(txt); } catch (e) { captionJson = { parse_error: e.message, raw: raw }; }\n  const platform = tasks[i] ? tasks[i].json.platform : (captionJson.platform || 'unknown');\n  return { json: { job_id: job_id, platform: platform, captionJson: captionJson } };\n});"
+      },
+      "id": "c0000000-0000-4000-8000-000000000006",
+      "name": "Parse Caption",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1488, 304]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": { "__rl": true, "mode": "list", "value": "public" },
+        "table": { "__rl": true, "mode": "list", "value": "platform_captions" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $json.job_id }}",
+            "platform": "={{ $json.platform }}",
+            "content_type": "static",
+            "aspect_ratio": "4:5",
+            "caption": "={{ JSON.stringify($json.captionJson) }}",
+            "status": "pending"
+          }
+        },
+        "options": {}
+      },
+      "id": "c0000000-0000-4000-8000-000000000007",
+      "name": "Insert Caption",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1696, 304],
+      "credentials": {
+        "postgres": { "id": "5AWMkUroR4Less3r", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { job_id: $('Get Job').first().json.id, platforms: $('Parse Webhook Input').first().json.platforms } }];"
+      },
+      "id": "c0000000-0000-4000-8000-000000000008",
+      "name": "Collapse to Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1904, 304]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": { "__rl": true, "mode": "list", "value": "public" },
+        "table": { "__rl": true, "mode": "list", "value": "approval_stages" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $json.job_id }}",
+            "stage_number": "5",
+            "stage_name": "captions",
+            "content": "={{ JSON.stringify({ platforms: $json.platforms }) }}",
+            "status": "pending",
+            "resume_url": "={{ $execution.resumeUrl }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "c0000000-0000-4000-8000-000000000009",
+      "name": "Insert Approval (Stage 5)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [2112, 304],
+      "credentials": {
+        "postgres": { "id": "5AWMkUroR4Less3r", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "options": {}
+      },
+      "id": "c0000000-0000-4000-8000-00000000000a",
+      "name": "Wait for Captions Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2320, 304],
+      "webhookId": "bbbb2222-cccc-3333-dddd-444455556666"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\nbody = body || {};\nconst notes = (body.notes || body.feedback || '').toString();\nconst job_id = $('Get Job').first().json.id;\nreturn [{ json: { job_id: job_id, notes: notes } }];"
+      },
+      "id": "c0000000-0000-4000-8000-00000000000b",
+      "name": "Parse Stage5 Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2528, 304]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": { "__rl": true, "mode": "list", "value": "public" },
+        "table": { "__rl": true, "mode": "list", "value": "approval_stages" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $json.job_id }}",
+            "stage_number": "5",
+            "status": "approved",
+            "feedback": "={{ $json.notes }}",
+            "reviewed_at": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": ["job_id", "stage_number"]
+        },
+        "options": {}
+      },
+      "id": "c0000000-0000-4000-8000-00000000000c",
+      "name": "Close Stage5 Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [2736, 304],
+      "credentials": {
+        "postgres": { "id": "5AWMkUroR4Less3r", "name": "Postgres account" }
+      }
+    }
+  ],
+  "connections": {
+    "Repurpose (Webhook)": {
+      "main": [[{ "node": "Parse Webhook Input", "type": "main", "index": 0 }]]
+    },
+    "Parse Webhook Input": {
+      "main": [[{ "node": "Get Job", "type": "main", "index": 0 }]]
+    },
+    "Get Job": {
+      "main": [[{ "node": "Shorten URL", "type": "main", "index": 0 }]]
+    },
+    "Shorten URL": {
+      "main": [[{ "node": "Build Caption Tasks", "type": "main", "index": 0 }]]
+    },
+    "Build Caption Tasks": {
+      "main": [[{ "node": "Claude - Caption", "type": "main", "index": 0 }]]
+    },
+    "Claude - Caption": {
+      "main": [[{ "node": "Parse Caption", "type": "main", "index": 0 }]]
+    },
+    "Parse Caption": {
+      "main": [[{ "node": "Insert Caption", "type": "main", "index": 0 }]]
+    },
+    "Insert Caption": {
+      "main": [[{ "node": "Collapse to Job", "type": "main", "index": 0 }]]
+    },
+    "Collapse to Job": {
+      "main": [[{ "node": "Insert Approval (Stage 5)", "type": "main", "index": 0 }]]
+    },
+    "Insert Approval (Stage 5)": {
+      "main": [[{ "node": "Wait for Captions Approval", "type": "main", "index": 0 }]]
+    },
+    "Wait for Captions Approval": {
+      "main": [[{ "node": "Parse Stage5 Approval", "type": "main", "index": 0 }]]
+    },
+    "Parse Stage5 Approval": {
+      "main": [[{ "node": "Close Stage5 Approval", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

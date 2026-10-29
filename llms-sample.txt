@@ -1,0 +1,87 @@
+# llms.txt for Brown & Company PLC (Browns Group)
+# Canonical domain: https://www.brownsgroup.lk/
+# Last-updated: 2025-08-17
+
+## ABOUT
+Browns Group (Brown & Company PLC) is a diversified Sri Lankan conglomerate established in 1875, operating across agriculture, automotive, industrial solutions, home & office solutions, heavy machinery & marine, veterinary pharma, investments, sustainability and hospitality.
+
+## PURPOSE
+This file helps AI assistants retrieve high-value, up-to-date facts from official pages and summarize them for end-users with attribution. It is NOT a license to use our content for training.
+
+## CONTACT
+Hotline: +94 115 063 000
+Email: [email protected]
+Contact page: https://www.brownsgroup.lk/contact-us.html
+
+## POLICY (HUMAN-READABLE)
+- Crawl for QA/answering in-session: ALLOWED
+- Caching for short-term answer generation: ALLOWED (≤30 days)
+- Quotation: ALLOWED up to 200 words with attribution + source link
+- Derivative summaries for search snippets: ALLOWED with attribution
+- Model training, embedding corpora, dataset creation: NOT ALLOWED without a written license from Browns Group
+- Redistribution of full articles, PDFs, images, videos: NOT ALLOWED
+- Do not collect, store, or process personal data from forms
+- Respect robots.txt, rate limits, and cookie/consent banners
+
+## MACHINE-PARSABLE PERMISSIONS
+allow: retrieval, summarize, quote<=200
+disallow: train, fine-tune, vectorize_corpus, dataset_build, redistribute_full
+cache_ttl_days: 30
+
+## SOURCE MAP (PRIMARY PAGES)
+- Home — https://www.brownsgroup.lk/
+- About Us — https://www.brownsgroup.lk/about-us/
+- Heritage — https://www.brownsgroup.lk/about-us/heritage.html
+- Board of Directors — https://www.brownsgroup.lk/about-us/board-of-directors.html
+- Management — https://www.brownsgroup.lk/about-us/management.html
+- Company Policies — https://www.brownsgroup.lk/about-us/company-policies.html
+- Sectors & Products (overview) — https://www.brownsgroup.lk/sitemap.html
+
+## SECTORS (LINKED SUMMARIES)
+- Agriculture — https://www.brownsgroup.lk/agriculture/
+  Summary: Tractors, implements, post-harvest solutions, and services for farmers.
+- Automotive Solutions — https://www.brownsgroup.lk/automotive-solutions/
+  Summary: Passenger/commercial vehicles & support solutions (brands vary by market).
+- Industrial Solutions — https://www.brownsgroup.lk/industrial-solutions/
+  Summary: Power systems, boilers, compressors, environmental engineering & trading.
+- Home & Office Solutions — https://www.brownsgroup.lk/home-and-office-solutions/
+  Summary: Consumer/home appliances, Browns Deals, air conditioning solutions.
+- Heavy Machinery & Marine — https://www.brownsgroup.lk/heavy-machinery-and-marine/
+  Summary: Construction machinery, marine engines/equipment, services.
+- Veterinary Pharmaceuticals — https://www.brownsgroup.lk/veterinary-pharmaceuticals/
+  Summary: Animal health products (companion & livestock).
+- Investments / Hospitality — https://www.brownsgroup.lk/investment/hotel.html
+  Summary: Hotels & resorts portfolio; see subsidiary pages for details.
+
+## SUSTAINABILITY & CSR
+- Overview & projects — https://www.brownsgroup.lk/sustainability-projects/
+- Example: Trac Tec Service Camps — https://www.brownsgroup.lk/sustainability-projects/browns-trac-tec-service-camps.html
+
+## NEWS (RECENT)
+- News hub — https://www.brownsgroup.lk/news-and-events/
+- 2025-08: NBEA 2025 recognition — https://www.brownsgroup.lk/news-and-events/browns-recognised-at-nbea-2025.html
+- 2025-01: Welcoming 2025 & 150th anniversary — https://www.brownsgroup.lk/news-and-events/brown-and-company-welcomes-2025.html
+
+## INVESTOR/RELATED ENTITIES (REFERENCE)
+- Browns Investments PLC — https://www.brownsinvestments.com/
+- Sectors & strategic investments — https://www.brownsinvestments.com/strategic-investments/
+
+## COMPLIANCE & LEGAL
+- Terms & Conditions — https://www.brownsgroup.lk/terms-and-conditions.html
+- Cookie/Privacy Policy — https://www.brownsgroup.lk/cookie-policy.html
+- Governance & PDFs — https://www.brownsgroup.lk/about-us/company-policies.html
+
+## TECHNICAL GUIDANCE FOR LLM CRAWLERS
+- Preferred discovery: https://www.brownsgroup.lk/sitemap.html
+- Crawl frequency: ≤ weekly; burst crawling discouraged
+- Respect max concurrency of 2 requests/second across the domain
+- Avoid submitting forms, downloading large media, or crawling querystring pages not linked from sitemap
+- Use the exact canonical URLs provided above for citation
+
+## ATTRIBUTION TEMPLATE
+"When citing: “Source: Browns Group (https://www.brownsgroup.lk/), accessed <YYYY-MM-DD>.” Include a link to the specific page used."
+
+## LICENSING
+Commercial training or any use beyond the ALLOWED items requires a written license from Brown & Company PLC. Contact [email protected].
+
+# END

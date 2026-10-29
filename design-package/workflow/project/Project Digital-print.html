@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Project Digital — Print</title>
+<meta name="viewport" content="width=1440" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F6F7FB;
+    --surface: #FFFFFF;
+    --border: #E5E7EB;
+    --border-strong: #D1D5DB;
+    --text: #0F172A;
+    --text-2: #475569;
+    --text-3: #94A3B8;
+
+    --primary: #4338CA;
+    --primary-600: #3730A3;
+    --primary-50: #EEF2FF;
+    --primary-100: #E0E7FF;
+
+    --ai: #7C3AED;
+    --ai-50: #F5F3FF;
+    --ai-100: #EDE9FE;
+
+    --amber: #B45309;
+    --amber-50: #FFFBEB;
+    --amber-100: #FEF3C7;
+
+    --green: #047857;
+    --green-50: #ECFDF5;
+    --green-100: #D1FAE5;
+
+    --red: #B91C1C;
+    --red-50: #FEF2F2;
+    --red-100: #FEE2E2;
+
+    --blue: #1D4ED8;
+    --blue-50: #EFF6FF;
+    --blue-100: #DBEAFE;
+
+    --teal: #0F766E;
+    --teal-50: #F0FDFA;
+    --teal-100: #CCFBF1;
+
+    --sidebar: #0B1220;
+    --sidebar-2: #111A2E;
+    --sidebar-text: #CBD5E1;
+    --sidebar-text-muted: #64748B;
+    --sidebar-border: #1E293B;
+
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-i, sans-serif;
+    background: #E5E7EB;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; padding: 0; color: inherit; }
+  input, textarea, select { font-family: inherit; font-size: inherit; color: inherit; }
+  textarea { resize: none; }
+  ::placeholder { color: var(--text-3); }
+
+  /* print page */
+  .print-page {
+    width: 1440px;
+    min-height: 1800px;
+    background: var(--bg);
+    margin: 24px auto;
+    box-shadow: 0 4px 24px rgba(15, 23, 42, 0.12);
+    overflow: hidden;
+    page-break-after: always;
+    break-after: page;
+    position: relative;
+  }
+  .print-page:last-child { page-break-after: auto; break-after: auto; }
+  .print-page-label {
+    position: absolute; top: 12px; right: 16px; z-index: 100;
+    background: rgba(15, 23, 42, 0.8); color: white;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    padding: 4px 9px; border-radius: 4px; letter-spacing: 0.03em;
+  }
+
+  /* App shell */
+  .app { display: grid; grid-template-columns: 232px 1fr; min-height: 1800px; }
+
+  /* Sidebar */
+  .sb {
+    background: var(--sidebar);
+    color: var(--sidebar-text);
+    border-right: 1px solid var(--sidebar-border);
+    display: flex; flex-direction: column;
+    min-height: 1800px;
+  }
+  .sb-brand { padding: 22px 20px 18px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--sidebar-border); }
+  .sb-brand-mark {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: linear-gradient(135deg, #6366F1 0%, #4338CA 100%);
+    display: grid; place-items: center; color: white; font-weight: 700; font-size: 13px;
+  }
+  .sb-brand-text { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; color: #F1F5F9; }
+  .sb-brand-sub { font-size: 11px; color: var(--sidebar-text-muted); margin-top: 1px; letter-spacing: 0.02em; }
+  .sb-nav { padding: 14px 12px; display: flex; flex-direction: column; gap: 2px; flex: 1; }
+  .sb-section { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--sidebar-text-muted); padding: 14px 10px 6px; }
+  .sb-link {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 7px;
+    color: var(--sidebar-text); font-size: 13.5px; font-weight: 500;
+    text-align: left; width: 100%;
+  }
+  .sb-link.active { background: rgba(99, 102, 241, 0.18); color: #F8FAFC; box-shadow: inset 2px 0 0 #818CF8; }
+  .sb-link .ic { width: 16px; height: 16px; opacity: 0.85; flex-shrink: 0; }
+  .sb-link .count { margin-left: auto; font-size: 11px; background: rgba(255,255,255,0.08); padding: 1px 7px; border-radius: 10px; color: #CBD5E1; }
+  .sb-link.active .count { background: rgba(255,255,255,0.18); color: white; }
+
+  .sb-user { border-top: 1px solid var(--sidebar-border); padding: 12px; display: flex; align-items: center; gap: 10px; }
+  .sb-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #F472B6, #A855F7); display: grid; place-items: center; color: white; font-size: 12px; font-weight: 600; }
+  .sb-user-name { font-size: 13px; color: #F1F5F9; font-weight: 500; }
+  .sb-user-role { font-size: 11px; color: var(--sidebar-text-muted); }
+
+  /* Main */
+  .main { display: flex; flex-direction: column; min-width: 0; }
+  .content { padding: 28px 32px 32px; max-width: 1400px; width: 100%; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; white-space: nowrap; border: 1px solid transparent; }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-green { background: var(--green); color: white; }
+  .btn-amber { background: white; color: var(--amber); border-color: #FCD34D; }
+  .btn-red { background: white; color: var(--red); border-color: #FECACA; }
+  .btn-outline { background: white; color: var(--text); border-color: var(--border-strong); }
+  .btn-ghost { color: var(--text-2); padding: 7px 10px; }
+  .btn-sm { padding: 6px 10px; font-size: 12px; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .card-body { padding: 20px; }
+  .card-h { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-h-title { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.005em; }
+
+  /* Inputs */
+  .input, .textarea, .select {
+    width: 100%; background: white; border: 1px solid var(--border-strong); border-radius: 7px;
+    padding: 8px 11px; font-size: 13px; color: var(--text);
+  }
+  .textarea { padding: 10px 12px; line-height: 1.55; }
+  .label { font-size: 11.5px; font-weight: 500; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; display: block; }
+
+  /* Pills / Badges */
+  .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 500; line-height: 1.4; white-space: nowrap; }
+  .pill-purple { background: var(--ai-50); color: var(--ai); border: 1px solid var(--ai-100); }
+  .pill-amber { background: var(--amber-50); color: var(--amber); border: 1px solid var(--amber-100); }
+  .pill-green { background: var(--green-50); color: var(--green); border: 1px solid var(--green-100); }
+  .pill-red { background: var(--red-50); color: var(--red); border: 1px solid var(--red-100); }
+  .pill-blue { background: var(--blue-50); color: var(--blue); border: 1px solid var(--blue-100); }
+  .pill-teal { background: var(--teal-50); color: var(--teal); border: 1px solid var(--teal-100); }
+  .pill-slate { background: #F1F5F9; color: var(--text-2); border: 1px solid var(--border); }
+  .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  .ai-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--ai-50); color: var(--ai); border: 1px solid var(--ai-100); border-radius: 99px; font-size: 11px; font-weight: 500; }
+
+  /* Stage progress */
+  .stepper { display: flex; align-items: center; gap: 0; background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 20px; }
+  .step { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .step-dot { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+  .step-dot.done { background: var(--green); color: white; }
+  .step-dot.cur { background: var(--primary); color: white; box-shadow: 0 0 0 4px var(--primary-100); }
+  .step-dot.pending { background: #F1F5F9; color: var(--text-3); border: 1px solid var(--border); }
+  .step-label { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .step-label.done { color: var(--text-2); }
+  .step-label.cur { color: var(--text); font-weight: 600; }
+  .step-label.pending { color: var(--text-3); }
+  .step-line { flex: 1; height: 2px; background: #E5E7EB; min-width: 18px; margin: 0 8px; }
+  .step-line.done { background: var(--green); }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .stat { background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .stat-label { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+  .stat-val { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin-top: 6px; }
+  .stat-delta { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+
+  /* tabs */
+  .tabs { display: inline-flex; background: #F1F5F9; padding: 3px; border-radius: 8px; gap: 2px; }
+  .tab { padding: 6px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: var(--text-2); }
+  .tab.active { background: white; color: var(--text); box-shadow: var(--shadow-sm); }
+
+  /* Job table */
+  .jt { width: 100%; border-collapse: collapse; background: white; }
+  .jt th { text-align: left; font-size: 11px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; padding: 12px 16px; background: #FAFBFC; border-bottom: 1px solid var(--border); }
+  .jt td { padding: 14px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 13px; }
+  .jt tr:last-child td { border-bottom: none; }
+  .jt .job-title { font-weight: 500; color: var(--text); }
+  .jt .job-sub { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+
+  /* Action bar — inline in print */
+  .actionbar {
+    background: white; border-top: 1px solid var(--border);
+    padding: 14px 32px; display: flex; align-items: center; justify-content: space-between;
+    margin: 32px -32px -32px; /* extend full width within content */
+  }
+  .actionbar-left { display: flex; align-items: center; gap: 12px; }
+  .actionbar-right { display: flex; align-items: center; gap: 10px; }
+  .actionbar-note { font-size: 12px; color: var(--text-3); }
+
+  /* Two-column */
+  .split { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
+
+  /* Platform icons */
+  .pi { width: 22px; height: 22px; border-radius: 6px; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; color: white; flex-shrink: 0; }
+  .pi-ig { background: linear-gradient(135deg, #F58529, #DD2A7B, #8134AF); }
+  .pi-fb { background: #1877F2; }
+  .pi-tt { background: #000; }
+  .pi-yt { background: #FF0000; }
+  .pi-x  { background: #000; }
+  .pi-th { background: #000; }
+  .pi-li { background: #0A66C2; }
+  .pi-pn { background: #BD081C; }
+  .pi-rd { background: #FF4500; }
+
+  /* Editor */
+  .editor { background: white; padding: 56px 80px 40px; min-height: 0; line-height: 1.7; }
+  .editor h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 16px; line-height: 1.2; }
+  .editor h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin: 32px 0 10px; }
+  .editor h3 { font-size: 16px; font-weight: 600; margin: 24px 0 8px; }
+  .editor p { font-size: 15px; color: #1F2937; margin: 12px 0; }
+  .editor ul { padding-left: 22px; margin: 10px 0; }
+  .editor li { font-size: 15px; color: #1F2937; margin: 4px 0; }
+
+  /* Outline */
+  .outline-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 6px; }
+  .outline-item .grip { color: var(--text-3); padding-top: 4px; }
+  .outline-item .num { font-size: 11px; color: var(--text-3); font-weight: 600; padding: 4px 7px; background: #F1F5F9; border-radius: 4px; min-width: 26px; text-align: center; }
+  .outline-item.h1 .num { background: var(--primary-50); color: var(--primary); }
+  .outline-item.h2 .num { background: var(--ai-50); color: var(--ai); }
+  .outline-item .text { flex: 1; padding: 4px 0; font-size: 14px; }
+  .outline-item.h1 .text { font-weight: 600; font-size: 16px; }
+  .outline-item.h2 .text { font-weight: 500; }
+  .outline-item.h3 .text { color: var(--text-2); font-size: 13.5px; padding-left: 18px; }
+
+  /* Platform select */
+  .platform-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .platform-card { border: 1.5px solid var(--border); border-radius: 9px; padding: 14px; background: white; position: relative; }
+  .platform-card.sel { border-color: var(--primary); background: var(--primary-50); }
+  .platform-card.sel .platform-check { background: var(--primary); border-color: var(--primary); color: white; }
+  .platform-check { position: absolute; top: 10px; right: 10px; width: 18px; height: 18px; border: 1.5px solid var(--border-strong); border-radius: 4px; background: white; display: grid; place-items: center; }
+  .platform-name { font-size: 14px; font-weight: 600; margin-top: 8px; }
+  .platform-meta { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+
+  .type-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .type-card { border: 1.5px solid var(--border); border-radius: 9px; padding: 16px; background: white; text-align: left; position: relative; }
+  .type-card.sel { border-color: var(--primary); background: var(--primary-50); box-shadow: 0 0 0 3px var(--primary-100); }
+  .type-card .ratio-badge { position: absolute; top: 10px; right: 10px; font-family: 'JetBrains Mono', monospace; font-size: 10px; background: #F1F5F9; color: var(--text-2); padding: 2px 6px; border-radius: 4px; }
+
+  /* tab strip */
+  .ptabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); padding: 0 4px; }
+  .ptab { padding: 11px 14px; font-size: 13px; font-weight: 500; color: var(--text-2); border-bottom: 2px solid transparent; margin-bottom: -1px; display: flex; align-items: center; gap: 8px; }
+  .ptab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+  .pbar { width: 100%; height: 4px; background: #F1F5F9; border-radius: 99px; overflow: hidden; }
+  .pbar-fill { height: 100%; background: var(--green); border-radius: 99px; }
+
+  .hashtags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .hashtag { background: var(--primary-50); color: var(--primary); padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
+
+  .imgframe { position: relative; background: #F1F5F9; border-radius: 10px; overflow: hidden; }
+  .imgframe .ratio-tag { position: absolute; top: 10px; left: 10px; background: rgba(15, 23, 42, 0.7); color: white; font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 3px 8px; border-radius: 4px; }
+  .imgplaceholder {
+    width: 100%; height: 100%;
+    background-image: repeating-linear-gradient(135deg, #E2E8F0 0 8px, #F1F5F9 8px 16px);
+    display: grid; place-items: center; color: var(--text-3); font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  }
+
+  .check-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: white; margin-bottom: 8px; }
+  .check-row.done { background: var(--green-50); border-color: var(--green-100); }
+  .checkbox { width: 18px; height: 18px; border: 1.5px solid var(--border-strong); border-radius: 4px; background: white; flex-shrink: 0; display: grid; place-items: center; }
+  .checkbox.done { background: var(--green); border-color: var(--green); color: white; }
+  .check-label { font-size: 13.5px; }
+
+  .ph { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+  .ph-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .breadcrumb { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 12.5px; }
+  .breadcrumb .cur { color: var(--text-2); font-weight: 500; }
+  .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.015em; margin: 6px 0 0; }
+  .topbar-actions { display: flex; align-items: center; gap: 10px; }
+
+  .slug-row { display: flex; align-items: center; }
+  .slug-row .prefix { background: #F8FAFC; border: 1px solid var(--border-strong); border-right: none; padding: 8px 11px; border-radius: 7px 0 0 7px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-3); }
+  .slug-row .input { border-radius: 0 7px 7px 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+  .seo-preview { padding: 14px; background: #F8FAFC; border: 1px solid var(--border); border-radius: 8px; }
+  .seo-title { color: #1A0DAB; font-size: 16px; font-weight: 400; line-height: 1.3; }
+  .seo-url { color: #006621; font-size: 12px; margin: 3px 0; }
+  .seo-desc { color: #545454; font-size: 13px; line-height: 1.4; }
+
+  .bitly { padding: 14px; background: var(--blue-50); border: 1px solid var(--blue-100); border-radius: 8px; display: flex; align-items: center; gap: 10px; }
+  .bitly-url { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--blue); font-weight: 500; flex: 1; }
+
+  .ai-block { position: relative; }
+  .ai-block::before { content: ""; position: absolute; left: -10px; top: 0; bottom: 0; width: 2px; background: linear-gradient(to bottom, var(--ai), transparent); border-radius: 2px; }
+
+  .kbd { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #F1F5F9; padding: 1px 6px; border-radius: 4px; color: var(--text-2); }
+  .muted { color: var(--text-3); }
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px; background: #F1F5F9; color: var(--text-2); font-size: 11.5px; font-weight: 500; }
+
+  .ar-16x9 { aspect-ratio: 16/9; }
+  .ar-4x5 { aspect-ratio: 4/5; }
+  .ar-9x16 { aspect-ratio: 9/16; }
+  .ar-1x1 { aspect-ratio: 1/1; }
+
+  .editor-foot { display: flex; align-items: center; gap: 16px; padding: 12px 20px; background: #FAFBFC; border-top: 1px solid var(--border); border-radius: 0 0 var(--radius) var(--radius); font-size: 12px; color: var(--text-2); }
+  .editor-wrap { background: white; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+
+  /* PRINT */
+  @media print {
+    @page { size: 1480px 1900px; margin: 0; }
+    body { background: white; }
+    .print-page {
+      margin: 0; box-shadow: none; break-after: page; page-break-after: always;
+      width: 1480px; min-height: 1900px;
+    }
+    .print-page-label { display: none; }
+    .app, .sb { min-height: 1900px; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  }
+</style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="components.jsx"></script>
+  <script type="text/babel" src="dashboard.jsx"></script>
+  <script type="text/babel" src="blog-flow.jsx"></script>
+  <script type="text/babel" src="social-flow.jsx"></script>
+
+  <script type="text/babel">
+    const MOCK_JOBS_P = [
+      { id: 'PD-0247', type: 'blog', title: 'AI Workflows for Solo Creators in 2026', topic: 'How AI-assisted pipelines change content economics', stage: 1, status: 'awaiting_draft', created: 'May 24', platforms: [] },
+      { id: 'PD-0246', type: 'social', title: 'The 3-Checkpoint Approval Pattern', topic: 'Mini-explainer carousel for IG / LinkedIn', stage: 3, status: 'captions', created: 'May 24', platforms: ['instagram', 'linkedin', 'pinterest', 'threads'] },
+      { id: 'PD-0245', type: 'blog', title: 'Why Webhooks Beat Polling for Approval Flows', topic: 'Tech post on n8n architecture', stage: 0, status: 'awaiting_outline', created: 'May 23', platforms: [] },
+      { id: 'PD-0244', type: 'social', title: 'My CapCut Reel Workflow', topic: 'Behind-the-scenes Reel', stage: 4, status: 'formatting', created: 'May 23', platforms: ['instagram', 'tiktok', 'youtube'] },
+      { id: 'PD-0243', type: 'blog', title: 'Sanity vs Contentful for One-Person Teams', topic: 'CMS comparison post', stage: 3, status: 'image_review', created: 'May 22', platforms: [] },
+      { id: 'PD-0242', type: 'social', title: 'Meme: When the n8n graph finally works', topic: 'Workflow humor meme', stage: 5, status: 'ready_post', created: 'May 22', platforms: ['instagram', 'x', 'threads'] },
+      { id: 'PD-0241', type: 'blog', title: 'Cost Breakdown: 30 Posts a Month with AI', topic: 'Transparent cost teardown', stage: 5, status: 'published', created: 'May 20', platforms: [] },
+      { id: 'PD-0240', type: 'social', title: 'Carousel: Build vs Buy your approval stack', topic: 'Multi-slide explainer', stage: 6, status: 'scheduled', created: 'May 20', platforms: ['instagram', 'linkedin', 'facebook'] },
+      { id: 'PD-0239', type: 'blog', title: 'Observability for Solo Content Pipelines', topic: 'Logging + alerting walkthrough', stage: 2, status: 'image_prompt', created: 'May 18', platforms: [] },
+    ];
+    const JOB_BLOG = MOCK_JOBS_P[0];
+    const JOB_SOC = MOCK_JOBS_P[1];
+    const SELECTION = { platforms: ['instagram', 'pinterest', 'linkedin'], type: 'static', linkedinKind: 'post' };
+    const SELECTION_REEL = { platforms: ['instagram', 'tiktok', 'youtube'], type: 'reel', linkedinKind: 'post' };
+    const noop = () => {};
+
+    const PrintSidebar = ({ active }) => {
+      const links = [
+        { id: 'dashboard', label: 'Dashboard', icon: I.dashboard, count: 7 },
+        { id: 'blog', label: 'Blog Jobs', icon: I.blog, count: 4 },
+        { id: 'social', label: 'Social Jobs', icon: I.social, count: 3 },
+        { id: 'images', label: 'Image Library', icon: I.image },
+        { id: 'settings', label: 'Settings', icon: I.settings },
+      ];
+      return (
+        <aside className="sb">
+          <div className="sb-brand">
+            <div className="sb-brand-mark">PD</div>
+            <div>
+              <div className="sb-brand-text">Project Digital</div>
+              <div className="sb-brand-sub">Content workspace</div>
+            </div>
+          </div>
+          <nav className="sb-nav">
+            <div className="sb-section">Workspace</div>
+            {links.map(l => (
+              <div key={l.id} className={`sb-link ${active === l.id ? 'active' : ''}`}>
+                <l.icon className="ic" size={16} />
+                {l.label}
+                {l.count != null && l.count > 0 && <span className="count">{l.count}</span>}
+              </div>
+            ))}
+            <div className="sb-section">Recent</div>
+            {MOCK_JOBS_P.slice(0, 3).map(j => (
+              <div key={j.id} className="sb-link" style={{ fontSize: 12.5, color: 'var(--sidebar-text-muted)' }}>
+                <span style={{ width: 5, height: 5, borderRadius: 99, background: j.type === 'blog' ? '#818CF8' : '#C084FC', flexShrink: 0 }}></span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{j.title}</span>
+              </div>
+            ))}
+          </nav>
+          <div className="sb-user">
+            <div className="sb-avatar">SK</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="sb-user-name">Sam Kerrigan</div>
+              <div className="sb-user-role">Solo creator</div>
+            </div>
+          </div>
+        </aside>
+      );
+    };
+
+    const Page = ({ label, sidebar = 'dashboard', children }) => (
+      <div className="print-page">
+        <div className="print-page-label">{label}</div>
+        <div className="app">
+          <PrintSidebar active={sidebar} />
+          <main className="main">
+            <div className="content">{children}</div>
+          </main>
+        </div>
+      </div>
+    );
+
+    const PrintApp = () => (
+      <>
+        <Page label="01 · Dashboard" sidebar="dashboard">
+          <Dashboard jobs={MOCK_JOBS_P} onOpen={noop} />
+        </Page>
+        <Page label="02 · Blog · Outline Review" sidebar="blog">
+          <OutlineReview job={JOB_BLOG} onApprove={noop} onRequestEdits={noop} />
+        </Page>
+        <Page label="03 · Blog · Draft Review" sidebar="blog">
+          <DraftReview job={JOB_BLOG} onApprove={noop} onRequestEdits={noop} />
+        </Page>
+        <Page label="04 · Blog · Image Prompt" sidebar="blog">
+          <BlogImagePrompt job={JOB_BLOG} onGenerate={noop} onRegenerate={noop} />
+        </Page>
+        <Page label="05 · Blog · Image Approval" sidebar="blog">
+          <BlogImageApprove job={JOB_BLOG} onApprove={noop} onRequestChanges={noop} />
+        </Page>
+        <Page label="06 · Blog · Publish to Sanity" sidebar="blog">
+          <PublishCMS job={JOB_BLOG} onPublish={noop} onBack={noop} />
+        </Page>
+        <Page label="07 · Social · Platforms & Type" sidebar="social">
+          <PlatformSelect job={JOB_SOC} onContinue={noop} />
+        </Page>
+        <Page label="08 · Social · Image Prompt" sidebar="social">
+          <SocialImagePrompt job={JOB_SOC} selection={SELECTION} onGenerate={noop} />
+        </Page>
+        <Page label="09 · Social · Image Approval" sidebar="social">
+          <SocialImageApprove job={JOB_SOC} selection={SELECTION} onApprove={noop} onRequestChanges={noop} />
+        </Page>
+        <Page label="10 · Social · Captions & Hashtags" sidebar="social">
+          <CaptionsEditor job={JOB_SOC} selection={SELECTION} onApprove={noop} />
+        </Page>
+        <Page label="11 · Social · Resize & Format" sidebar="social">
+          <ResizeFormat job={MOCK_JOBS_P[3]} selection={SELECTION_REEL} onContinue={noop} />
+        </Page>
+        <Page label="12 · Social · Final Post Review" sidebar="social">
+          <FinalPostReview job={JOB_SOC} selection={SELECTION} onPost={noop} />
+        </Page>
+      </>
+    );
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<PrintApp />);
+
+    // Auto-print once fonts and layout are ready
+    (async () => {
+      try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+      // Give React + Babel a moment to settle
+      await new Promise(r => setTimeout(r, 800));
+      window.print();
+    })();
+  </script>
+</body>
+</html>

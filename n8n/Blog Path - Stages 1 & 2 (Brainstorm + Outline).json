@@ -1,0 +1,1493 @@
+{
+  "name": "Blog Path - Stages 1 & 2 (Brainstorm + Outline)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "10000000-0000-4000-8000-000000000001",
+      "name": "When clicking Test workflow",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "start-blog",
+        "options": {}
+      },
+      "id": "90000000-0000-4000-8000-000000000009",
+      "name": "Start (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        416
+      ],
+      "webhookId": "22223333-4444-4555-8666-777788889999"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a0000000-0000-4000-8000-000000000001",
+              "name": "topic",
+              "value": "={{ ($json.body && typeof $json.body === 'object' ? $json.body.topic : (typeof $json.body === 'string' ? JSON.parse($json.body).topic : null)) || 'How AI is changing content marketing for small businesses' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "20000000-0000-4000-8000-000000000002",
+      "name": "Set Topic",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-haiku-4-5-20251001\",\"max_tokens\":1500,\"system\":\"You are a sharp content strategist for a solo-founder content studio. Given a topic, propose 4-6 distinct, non-generic content angles a human editor can choose between. Respond with JSON only, no prose.\",\"messages\":[{\"role\":\"user\",\"content\":{{ JSON.stringify('Topic: ' + $json.topic + '\\n\\nReturn a JSON object with a field \"angles\" (an array of 4-6 items, each item having headline, hook, angle_type, and target_reader) and a field \"recommendation\" (a string).') }}}]}",
+        "options": {}
+      },
+      "id": "30000000-0000-4000-8000-000000000003",
+      "name": "Claude - Brainstorm",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        656,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "h9HojADDLPyDuAp8",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the JSON Claude returned (tolerate markdown code fences)\nconst res = $input.first().json;\nconst raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '';\nlet txt = raw.trim();\nif (txt.startsWith('```')) {\n  txt = txt.substring(txt.indexOf('\\n') + 1);\n  if (txt.endsWith('```')) txt = txt.slice(0, -3);\n  txt = txt.trim();\n}\nlet brainstorm;\ntry { brainstorm = JSON.parse(txt); }\ncatch (e) { brainstorm = { parse_error: e.message, raw: raw }; }\nreturn [{ json: { topic: $('Set Topic').first().json.topic, brainstorm } }];"
+      },
+      "id": "40000000-0000-4000-8000-000000000004",
+      "name": "Parse Angles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "content_jobs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $json.topic }}",
+            "branch": "blog",
+            "status": "brainstorm",
+            "data": "={{ JSON.stringify($json.brainstorm) }}",
+            "n8n_execution_id": "={{ $execution.id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "50000000-0000-4000-8000-000000000005",
+      "name": "Save Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1072,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "approval_stages"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $json.id }}",
+            "stage_number": "1",
+            "stage_name": "Brainstorm",
+            "content": "={{ JSON.stringify($('Parse Angles').first().json.brainstorm) }}",
+            "status": "pending",
+            "resume_url": "={{ $execution.resumeUrl }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "60000000-0000-4000-8000-000000000006",
+      "name": "Insert Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1280,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "options": {}
+      },
+      "id": "70000000-0000-4000-8000-000000000007",
+      "name": "Wait for Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1488,
+        304
+      ],
+      "webhookId": "11112222-3333-4444-8555-666677778888"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the resume payload from the dashboard's Stage-1 approval POST.\n// Body may be an object (n8n parsed it) or a string (defensive — older clients).\nconst input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') {\n  try { body = JSON.parse(body); } catch (e) { body = {}; }\n}\nbody = body || {};\n\nconst chosen_angle = (body.chosen_angle || body.angle || '').toString();\nconst angle_notes  = (body.angle_notes  || body.notes || '').toString();\nconst rawKeywords  = body.keywords || '';\n\nlet keywords = [];\nif (Array.isArray(rawKeywords)) {\n  keywords = rawKeywords.map(s => String(s).trim()).filter(Boolean);\n} else if (typeof rawKeywords === 'string' && rawKeywords.trim()) {\n  keywords = rawKeywords.split(',').map(s => s.trim()).filter(Boolean);\n}\n\n// Target word count: clamp to [300, 5000], default 1500.\nlet target_word_count = Number(body.target_word_count);\nif (!Number.isFinite(target_word_count) || target_word_count < 300 || target_word_count > 5000) {\n  target_word_count = 1500;\n}\n\nconst job_id = $('Save Job').first().json.id;\nconst topic  = $('Set Topic').first().json.topic;\n\nreturn [{ json: { job_id, topic, chosen_angle, angle_notes, keywords, target_word_count } }];"
+      },
+      "id": "a1000000-0000-4000-8000-00000000000a",
+      "name": "Parse Approval Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "content_jobs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.job_id }}",
+            "chosen_angle": "={{ $json.chosen_angle }}",
+            "keywords": "={{ $json.keywords }}",
+            "target_word_count": "={{ $json.target_word_count }}",
+            "status": "outline"
+          },
+          "matchingColumns": [
+            "id"
+          ]
+        },
+        "options": {}
+      },
+      "id": "a2000000-0000-4000-8000-00000000000b",
+      "name": "Update Job - Stage1 Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1904,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "approval_stages"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $('Parse Approval Payload').first().json.job_id }}",
+            "stage_number": "1",
+            "status": "approved",
+            "edited_content": "={{ JSON.stringify({ chosen_angle: $('Parse Approval Payload').first().json.chosen_angle, keywords: $('Parse Approval Payload').first().json.keywords }) }}",
+            "feedback": "={{ $('Parse Approval Payload').first().json.angle_notes }}",
+            "reviewed_at": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [
+            "job_id",
+            "stage_number"
+          ]
+        },
+        "options": {}
+      },
+      "id": "a3000000-0000-4000-8000-00000000000c",
+      "name": "Close Stage1 Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2112,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-sonnet-4-6\",\"max_tokens\":2500,\"system\":\"You are a senior content editor for Project Digital. You write outlines a human can approve in under a minute that translate cleanly into a blog post of the editor-specified word count. You optimise for reader value first, SEO second. Rules: skimmable H2/H3 hierarchy with no orphan sections; work the keywords in naturally, never keyword-stuff; every section needs a one-line intent note so the editor approves substance not just headings; flag anywhere a stat/quote/example needs a human-supplied fact; allocate per-section word_count values that sum to approximately the editor's target word count. Respond with JSON only, no prose, no markdown fences.\",\"messages\":[{\"role\":\"user\",\"content\":{{ JSON.stringify('Topic: ' + $('Parse Approval Payload').first().json.topic + '\\n\\nChosen angle: ' + $('Parse Approval Payload').first().json.chosen_angle + '\\n\\nTarget total word count: ' + $('Parse Approval Payload').first().json.target_word_count + ' words (your per-section word_counts should sum to roughly this).\\n\\nTarget keywords: ' + (($('Parse Approval Payload').first().json.keywords || []).join(', ') || '(none provided \\u2014 infer 3-5 from the angle)') + '\\n\\nEditor notes (incorporate these): ' + ($('Parse Approval Payload').first().json.angle_notes || '(none)') + '\\n\\nReturn JSON: { \"title\": string, \"title_alternates\": [string, string], \"meta_description\": string (<=155 chars), \"sections\": [ { \"heading\": string, \"level\": \"h2\", \"intent\": string, \"word_count\": number, \"subsections\": [ { \"heading\": string, \"level\": \"h3\", \"intent\": string } ] } ], \"open_questions\": [string] }') }}}]}",
+        "options": {}
+      },
+      "id": "a4000000-0000-4000-8000-00000000000d",
+      "name": "Claude - Outline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2320,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "h9HojADDLPyDuAp8",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Claude's outline JSON, tolerating accidental code fences.\nconst res = $input.first().json;\nconst raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '';\nlet txt = raw.trim();\nif (txt.startsWith('```')) {\n  txt = txt.substring(txt.indexOf('\\n') + 1);\n  if (txt.endsWith('```')) txt = txt.slice(0, -3);\n  txt = txt.trim();\n}\nlet outline;\ntry { outline = JSON.parse(txt); }\ncatch (e) { outline = { parse_error: e.message, raw: raw }; }\n\nconst job_id = $('Parse Approval Payload').first().json.job_id;\nreturn [{ json: { job_id, outline } }];"
+      },
+      "id": "a5000000-0000-4000-8000-00000000000e",
+      "name": "Parse Outline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2528,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "content_jobs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.job_id }}",
+            "outline": "={{ JSON.stringify($json.outline) }}"
+          },
+          "matchingColumns": [
+            "id"
+          ]
+        },
+        "options": {}
+      },
+      "id": "a6000000-0000-4000-8000-00000000000f",
+      "name": "Save Outline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2736,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "approval_stages"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $('Parse Outline').first().json.job_id }}",
+            "stage_number": "2",
+            "stage_name": "Outline",
+            "content": "={{ JSON.stringify($('Parse Outline').first().json.outline) }}",
+            "status": "pending",
+            "resume_url": "={{ $execution.resumeUrl }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "a7000000-0000-4000-8000-000000000010",
+      "name": "Insert Approval (Stage 2)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2944,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "options": {}
+      },
+      "id": "a8000000-0000-4000-8000-000000000011",
+      "name": "Wait for Outline Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3152,
+        304
+      ],
+      "webhookId": "33334444-5555-6666-8777-888899990000"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the Stage-2 (Outline) approval resume payload. Same defensive\n// string-or-object handling as Stage 1.\nconst input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') {\n  try { body = JSON.parse(body); } catch (e) { body = {}; }\n}\nbody = body || {};\n\nconst outline_notes  = (body.outline_notes || body.notes || body.feedback || '').toString();\nconst edited_outline = body.edited_outline || body.outline || null;\n\nconst job_id = $('Parse Outline').first().json.job_id;\nreturn [{ json: { job_id, outline_notes, edited_outline } }];"
+      },
+      "id": "a9000000-0000-4000-8000-000000000012",
+      "name": "Parse Stage2 Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "approval_stages"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $json.job_id }}",
+            "stage_number": "2",
+            "status": "approved",
+            "feedback": "={{ $json.outline_notes }}",
+            "reviewed_at": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [
+            "job_id",
+            "stage_number"
+          ]
+        },
+        "options": {}
+      },
+      "id": "aa000000-0000-4000-8000-000000000013",
+      "name": "Close Stage2 Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3568,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "content_jobs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Parse Stage2 Approval').first().json.job_id }}",
+            "status": "drafting"
+          },
+          "matchingColumns": [
+            "id"
+          ]
+        },
+        "options": {}
+      },
+      "id": "ab000000-0000-4000-8000-000000000014",
+      "name": "Advance Status - Drafting",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3776,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-sonnet-4-6\",\"max_tokens\":8000,\"system\":\"You are a writer for Project Digital. You write clear, confident, genuinely useful blog posts \\u2014 no filler, no AI throat-clearing. Rules: follow the approved outline exactly (no added or dropped sections); voice is knowledgeable peer not a brand, short active sentences; Markdown output with # title, ##/### for sections, real lists and tables; work keywords in naturally; where the outline flagged an open question or missing stat, insert a clearly marked > **[EDITOR: ...]** blockquote inline rather than inventing facts; never fabricate statistics, studies, quotes, or sources. Hit the editor-specified word count target within +/- 10%. End with a short non-salesy CTA paragraph. Output: Markdown only, no JSON, no code fences.\",\"messages\":[{\"role\":\"user\",\"content\":{{ JSON.stringify('Topic: ' + $('Parse Approval Payload').first().json.topic + '\\n\\nAngle: ' + $('Parse Approval Payload').first().json.chosen_angle + '\\n\\nKeywords: ' + (($('Parse Approval Payload').first().json.keywords || []).join(', ') || '(none)') + '\\n\\nTarget word count: ' + $('Parse Approval Payload').first().json.target_word_count + ' words (aim for +/- 10%).\\n\\nApproved outline (JSON):\\n' + JSON.stringify($('Parse Outline').first().json.outline)) }}}]}",
+        "options": {}
+      },
+      "id": "ac000000-0000-4000-8000-000000000015",
+      "name": "Claude - Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3984,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "h9HojADDLPyDuAp8",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract Claude's draft markdown, tolerating accidental code fences.\nconst res = $input.first().json;\nconst raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '';\nlet txt = raw.trim();\nif (txt.startsWith('```')) {\n  txt = txt.substring(txt.indexOf('\\n') + 1);\n  if (txt.endsWith('```')) txt = txt.slice(0, -3);\n  txt = txt.trim();\n}\nconst job_id = $('Parse Outline').first().json.job_id;\nreturn [{ json: { job_id, draft_md: txt } }];"
+      },
+      "id": "ad000000-0000-4000-8000-000000000016",
+      "name": "Parse Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4192,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "content_jobs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.job_id }}",
+            "draft_md": "={{ $json.draft_md }}"
+          },
+          "matchingColumns": [
+            "id"
+          ]
+        },
+        "options": {}
+      },
+      "id": "ae000000-0000-4000-8000-000000000017",
+      "name": "Save Draft",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        4400,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "approval_stages"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $('Parse Draft').first().json.job_id }}",
+            "stage_number": "3",
+            "stage_name": "Draft",
+            "content": "={{ JSON.stringify({ markdown: $('Parse Draft').first().json.draft_md }) }}",
+            "status": "pending",
+            "resume_url": "={{ $execution.resumeUrl }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "af000000-0000-4000-8000-000000000018",
+      "name": "Insert Approval (Stage 3)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        4608,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "options": {}
+      },
+      "id": "b0000000-0000-4000-8000-000000000019",
+      "name": "Wait for Draft Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4816,
+        304
+      ],
+      "webhookId": "55556666-7777-8888-9999-aaaabbbbcccc"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the Stage-3 (Draft) approval resume payload.\nconst input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') {\n  try { body = JSON.parse(body); } catch (e) { body = {}; }\n}\nbody = body || {};\n\nconst draft_notes = (body.draft_notes || body.notes || body.feedback || '').toString();\nconst job_id = $('Parse Draft').first().json.job_id;\nreturn [{ json: { job_id, draft_notes } }];"
+      },
+      "id": "b1000000-0000-4000-8000-00000000001a",
+      "name": "Parse Stage3 Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5024,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "approval_stages"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $json.job_id }}",
+            "stage_number": "3",
+            "status": "approved",
+            "feedback": "={{ $json.draft_notes }}",
+            "reviewed_at": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [
+            "job_id",
+            "stage_number"
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-00000000001b",
+      "name": "Close Stage3 Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        5232,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "content_jobs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Parse Stage3 Approval').first().json.job_id }}",
+            "status": "image"
+          },
+          "matchingColumns": [
+            "id"
+          ]
+        },
+        "options": {}
+      },
+      "id": "b3000000-0000-4000-8000-00000000001c",
+      "name": "Advance Status - Image",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        5440,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-haiku-4-5-20251001\",\"max_tokens\":600,\"system\":\"You are an art director for a content studio. Given a blog topic and angle, write a vivid, specific image-generation prompt for a 16:9 blog hero image. Editorial photography or clean illustration. No text in the image, no logos, no brand marks. Include composition cues (subject, lighting, mood, palette). Return JSON only.\",\"messages\":[{\"role\":\"user\",\"content\":{{ JSON.stringify('Topic: ' + $('Parse Approval Payload').first().json.topic + '\\n\\nAngle: ' + $('Parse Approval Payload').first().json.chosen_angle + '\\n\\nMeta description: ' + ($('Parse Outline').first().json.outline.meta_description || '') + '\\n\\nReturn JSON: { \"prompt\": string (50-150 words, vivid and specific), \"style\": string (e.g. \"editorial photography\" or \"minimalist illustration\") }') }}}]}",
+        "options": {}
+      },
+      "id": "b4000000-0000-4000-8000-00000000001d",
+      "name": "Claude - Image Prompt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5648,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "h9HojADDLPyDuAp8",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract { prompt, style } from Claude's JSON, tolerating fences.\nconst res = $input.first().json;\nconst raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '';\nlet txt = raw.trim();\nif (txt.startsWith('```')) {\n  txt = txt.substring(txt.indexOf('\\n') + 1);\n  if (txt.endsWith('```')) txt = txt.slice(0, -3);\n  txt = txt.trim();\n}\nlet parsed;\ntry { parsed = JSON.parse(txt); }\ncatch (e) { parsed = { prompt: '', style: '', parse_error: e.message, raw }; }\n\nconst job_id = $('Parse Stage3 Approval').first().json.job_id;\nreturn [{ json: { job_id, prompt: parsed.prompt || '', style: parsed.style || '', parse_error: parsed.parse_error || null } }];"
+      },
+      "id": "b5000000-0000-4000-8000-00000000001e",
+      "name": "Parse Image Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5856,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"instances\":[{\"prompt\":{{ JSON.stringify($json.prompt) }}}],\"parameters\":{\"sampleCount\":1,\"aspectRatio\":\"16:9\",\"personGeneration\":\"allow_adult\",\"safetyFilterLevel\":\"block_low_and_above\"}}",
+        "options": {}
+      },
+      "id": "b6000000-0000-4000-8000-00000000001f",
+      "name": "Gemini - Imagen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6064,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "v6vqS7OMCUeZLF89",
+          "name": "Header Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the base64 image from Imagen's response.\nconst res = $input.first().json;\nconst predictions = res.predictions || [];\nconst first = predictions[0] || {};\nconst image_b64 = first.bytesBase64Encoded || '';\nconst mime_type = first.mimeType || 'image/png';\n\nif (!image_b64) {\n  throw new Error('No image in Gemini response: ' + JSON.stringify(res).slice(0, 500));\n}\n\nconst job_id = $('Parse Image Prompt').first().json.job_id;\nconst prompt = $('Parse Image Prompt').first().json.prompt;\nreturn [{ json: { job_id, prompt, image_b64, mime_type } }];"
+      },
+      "id": "b7000000-0000-4000-8000-000000000020",
+      "name": "Parse Image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6272,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "generated_images"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $json.job_id }}",
+            "prompt": "={{ $json.prompt }}",
+            "image_b64": "={{ $json.image_b64 }}",
+            "mime_type": "={{ $json.mime_type }}",
+            "is_chosen": true,
+            "generated_by": "imagen-3.0-generate-002"
+          }
+        },
+        "options": {}
+      },
+      "id": "b8000000-0000-4000-8000-000000000021",
+      "name": "Save Image",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        6480,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "approval_stages"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $('Parse Image').first().json.job_id }}",
+            "stage_number": "4",
+            "stage_name": "Image",
+            "content": "={{ JSON.stringify({ image_id: $('Save Image').first().json.id, prompt: $('Parse Image').first().json.prompt }) }}",
+            "status": "pending",
+            "resume_url": "={{ $execution.resumeUrl }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "b9000000-0000-4000-8000-000000000022",
+      "name": "Insert Approval (Stage 4)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        6688,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "options": {}
+      },
+      "id": "ba000000-0000-4000-8000-000000000023",
+      "name": "Wait for Image Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        6896,
+        304
+      ],
+      "webhookId": "77778888-9999-aaaa-bbbb-ccccddddeeee"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the Stage-4 (Image) approval resume payload.\nconst input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') {\n  try { body = JSON.parse(body); } catch (e) { body = {}; }\n}\nbody = body || {};\n\nconst image_notes = (body.image_notes || body.notes || body.feedback || '').toString();\nconst job_id = $('Parse Image').first().json.job_id;\nreturn [{ json: { job_id, image_notes } }];"
+      },
+      "id": "bb000000-0000-4000-8000-000000000024",
+      "name": "Parse Stage4 Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7104,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "approval_stages"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $json.job_id }}",
+            "stage_number": "4",
+            "status": "approved",
+            "feedback": "={{ $json.image_notes }}",
+            "reviewed_at": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [
+            "job_id",
+            "stage_number"
+          ]
+        },
+        "options": {}
+      },
+      "id": "bc000000-0000-4000-8000-000000000025",
+      "name": "Close Stage4 Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        7312,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "content_jobs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Parse Stage4 Approval').first().json.job_id }}",
+            "status": "cms"
+          },
+          "matchingColumns": [
+            "id"
+          ]
+        },
+        "options": {}
+      },
+      "id": "bd000000-0000-4000-8000-000000000026",
+      "name": "Advance Status - CMS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        7520,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "5AWMkUroR4Less3r",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking Test workflow": {
+      "main": [
+        [
+          {
+            "node": "Set Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Set Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Topic": {
+      "main": [
+        [
+          {
+            "node": "Claude - Brainstorm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude - Brainstorm": {
+      "main": [
+        [
+          {
+            "node": "Parse Angles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Angles": {
+      "main": [
+        [
+          {
+            "node": "Save Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Job": {
+      "main": [
+        [
+          {
+            "node": "Insert Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Approval": {
+      "main": [
+        [
+          {
+            "node": "Wait for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Approval": {
+      "main": [
+        [
+          {
+            "node": "Parse Approval Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Approval Payload": {
+      "main": [
+        [
+          {
+            "node": "Update Job - Stage1 Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Job - Stage1 Approval": {
+      "main": [
+        [
+          {
+            "node": "Close Stage1 Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close Stage1 Approval": {
+      "main": [
+        [
+          {
+            "node": "Claude - Outline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude - Outline": {
+      "main": [
+        [
+          {
+            "node": "Parse Outline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Outline": {
+      "main": [
+        [
+          {
+            "node": "Save Outline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Outline": {
+      "main": [
+        [
+          {
+            "node": "Insert Approval (Stage 2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Approval (Stage 2)": {
+      "main": [
+        [
+          {
+            "node": "Wait for Outline Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Outline Approval": {
+      "main": [
+        [
+          {
+            "node": "Parse Stage2 Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Stage2 Approval": {
+      "main": [
+        [
+          {
+            "node": "Close Stage2 Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close Stage2 Approval": {
+      "main": [
+        [
+          {
+            "node": "Advance Status - Drafting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Advance Status - Drafting": {
+      "main": [
+        [
+          {
+            "node": "Claude - Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude - Draft": {
+      "main": [
+        [
+          {
+            "node": "Parse Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Draft": {
+      "main": [
+        [
+          {
+            "node": "Save Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Draft": {
+      "main": [
+        [
+          {
+            "node": "Insert Approval (Stage 3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Approval (Stage 3)": {
+      "main": [
+        [
+          {
+            "node": "Wait for Draft Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Draft Approval": {
+      "main": [
+        [
+          {
+            "node": "Parse Stage3 Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Stage3 Approval": {
+      "main": [
+        [
+          {
+            "node": "Close Stage3 Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close Stage3 Approval": {
+      "main": [
+        [
+          {
+            "node": "Advance Status - Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Advance Status - Image": {
+      "main": [
+        [
+          {
+            "node": "Claude - Image Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude - Image Prompt": {
+      "main": [
+        [
+          {
+            "node": "Parse Image Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Image Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini - Imagen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini - Imagen": {
+      "main": [
+        [
+          {
+            "node": "Parse Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Image": {
+      "main": [
+        [
+          {
+            "node": "Save Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Image": {
+      "main": [
+        [
+          {
+            "node": "Insert Approval (Stage 4)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Approval (Stage 4)": {
+      "main": [
+        [
+          {
+            "node": "Wait for Image Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Image Approval": {
+      "main": [
+        [
+          {
+            "node": "Parse Stage4 Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Stage4 Approval": {
+      "main": [
+        [
+          {
+            "node": "Close Stage4 Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close Stage4 Approval": {
+      "main": [
+        [
+          {
+            "node": "Advance Status - CMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c91cadad-490f-436d-997e-f16fa7ab0c87",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f9eb311d13df2d420f98ccbd585326d13017fbd9b15c20d6aaf7534345b8d29c"
+  },
+  "id": "stage1brainstorm",
+  "tags": []
+}

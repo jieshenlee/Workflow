@@ -1,0 +1,512 @@
+{
+  "id": "guidelinescapture",
+  "name": "Guidelines Capture (Dashboard upload -> AI category+summary -> confirm -> TTS)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "guideline-upload",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "gu100000-0000-4000-8000-000000000001",
+      "name": "Upload Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 480],
+      "webhookId": "dd224455-bbbb-5555-cccc-ddee00112255"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json;\nconst d = (raw.body && raw.body.source_type !== undefined) ? raw.body : raw;\nreturn [{ json: {\n  source_type: d.source_type || 'pdf',\n  title: (d.title || '').toString().slice(0, 200) || 'Untitled guideline',\n  file_b64: d.file_b64 || '',\n  mime_type: d.mime_type || 'application/pdf',\n  source_url: d.source_url || ''\n} }];"
+      },
+      "id": "gu100000-0000-4000-8000-000000000002",
+      "name": "Prepare Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 480]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "gu1cond01",
+              "leftValue": "={{ $json.source_type }}",
+              "rightValue": "pdf",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "gu100000-0000-4000-8000-000000000003",
+      "name": "Is PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [680, 480]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "gu1cond02",
+              "leftValue": "={{ $json.source_type }}",
+              "rightValue": "screenshot",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "gu100000-0000-4000-8000-000000000004",
+      "name": "Is Screenshot?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [900, 700],
+      "notes": "Reached only when Is PDF? is false, so the remaining case here is 'blog' on the false branch."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-sonnet-4-6\",\"max_tokens\":4000,\"system\":[{\"type\":\"text\",\"text\":\"You extract reference/guideline material for a content studio's internal knowledge base. Always return ONLY valid JSON, no markdown fences, no commentary.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"document\",\"source\":{\"type\":\"base64\",\"media_type\":\"application/pdf\",\"data\":{{ JSON.stringify($json.file_b64) }}}},{\"type\":\"text\",\"text\":{{ JSON.stringify('Working title (may be empty): ' + ($json.title || '(none)') + '. Read this PDF and: (1) suggest a short 2-4 word title if the working title is generic, (2) classify its subject into a short free-text category (e.g. \\'Brand Voice\\', \\'SEO Rules\\', \\'Legal\\', \\'Design System\\' - pick whatever fits, do not force it into a fixed list), (3) write a 2-3 sentence summary of what this guideline covers and when to apply it, (4) transcribe the full readable text content. Return ONLY valid JSON with exactly these keys: title, category, summary, extracted_text.') }}}]}]}",
+        "options": {}
+      },
+      "id": "gu100000-0000-4000-8000-000000000005",
+      "name": "Claude - Analyze PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 280],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": { "id": "h9HojADDLPyDuAp8", "name": "Header Auth account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '{}';\nlet txt = raw.trim();\nif (txt.startsWith('```')) { txt = txt.substring(txt.indexOf('\\n') + 1); if (txt.endsWith('```')) txt = txt.slice(0, -3); txt = txt.trim(); }\nlet parsed = {};\ntry { parsed = JSON.parse(txt); } catch (e) { parsed = {}; }\n\nconst prep = $('Prepare Data').first().json;\nreturn [{ json: {\n  source_type: 'pdf',\n  title: (parsed.title || prep.title || 'Untitled guideline').toString(),\n  category: (parsed.category || 'Uncategorized').toString(),\n  summary: (parsed.summary || '').toString(),\n  extracted_text: (parsed.extracted_text || '').toString(),\n  file_b64: prep.file_b64,\n  file_mime_type: prep.mime_type,\n  source_url: null\n} }];"
+      },
+      "id": "gu100000-0000-4000-8000-000000000006",
+      "name": "Parse PDF Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 280]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": { "__rl": true, "mode": "list", "value": "public" },
+        "table": { "__rl": true, "mode": "list", "value": "guideline_items" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source_type": "pdf",
+            "title": "={{ $json.title }}",
+            "file_b64": "={{ $json.file_b64 }}",
+            "file_mime_type": "={{ $json.file_mime_type }}",
+            "extracted_text": "={{ $json.extracted_text }}",
+            "ai_category": "={{ $json.category }}",
+            "category": "={{ $json.category }}",
+            "ai_summary": "={{ $json.summary }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "gu100000-0000-4000-8000-000000000007",
+      "name": "Save PDF Guideline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1340, 280],
+      "credentials": {
+        "postgres": { "id": "5AWMkUroR4Less3r", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, id: $json.id, title: $json.title, category: $json.category, summary: $json.ai_summary }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "gu100000-0000-4000-8000-000000000008",
+      "name": "Respond PDF OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1560, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-haiku-4-5-20251001\",\"max_tokens\":1500,\"system\":[{\"type\":\"text\",\"text\":\"You extract reference/guideline material for a content studio's internal knowledge base. Always return ONLY valid JSON, no markdown fences, no commentary.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":{{ JSON.stringify($json.mime_type) }},\"data\":{{ JSON.stringify($json.file_b64) }}}},{\"type\":\"text\",\"text\":{{ JSON.stringify('Working title (may be empty): ' + ($json.title || '(none)') + '. This is a screenshot of reference/guideline material. Transcribe every piece of readable text in it, (1) suggest a short 2-4 word title if the working title is generic, (2) classify its subject into a short free-text category (e.g. \\'Brand Voice\\', \\'SEO Rules\\', \\'Legal\\', \\'Design System\\' - pick whatever fits), (3) write a 2-3 sentence summary of what it covers and when to apply it. Return ONLY valid JSON with exactly these keys: title, category, summary, extracted_text.') }}}]}]}",
+        "options": {}
+      },
+      "id": "gu100000-0000-4000-8000-000000000009",
+      "name": "Claude Vision - Analyze Screenshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 600],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": { "id": "h9HojADDLPyDuAp8", "name": "Header Auth account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '{}';\nlet txt = raw.trim();\nif (txt.startsWith('```')) { txt = txt.substring(txt.indexOf('\\n') + 1); if (txt.endsWith('```')) txt = txt.slice(0, -3); txt = txt.trim(); }\nlet parsed = {};\ntry { parsed = JSON.parse(txt); } catch (e) { parsed = {}; }\n\nconst prep = $('Prepare Data').first().json;\nreturn [{ json: {\n  source_type: 'screenshot',\n  title: (parsed.title || prep.title || 'Untitled guideline').toString(),\n  category: (parsed.category || 'Uncategorized').toString(),\n  summary: (parsed.summary || '').toString(),\n  extracted_text: (parsed.extracted_text || '').toString(),\n  file_b64: prep.file_b64,\n  file_mime_type: prep.mime_type,\n  source_url: null\n} }];"
+      },
+      "id": "gu100000-0000-4000-8000-00000000000a",
+      "name": "Parse Screenshot Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 600]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": { "__rl": true, "mode": "list", "value": "public" },
+        "table": { "__rl": true, "mode": "list", "value": "guideline_items" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source_type": "screenshot",
+            "title": "={{ $json.title }}",
+            "file_b64": "={{ $json.file_b64 }}",
+            "file_mime_type": "={{ $json.file_mime_type }}",
+            "extracted_text": "={{ $json.extracted_text }}",
+            "ai_category": "={{ $json.category }}",
+            "category": "={{ $json.category }}",
+            "ai_summary": "={{ $json.summary }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "gu100000-0000-4000-8000-00000000000b",
+      "name": "Save Screenshot Guideline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1560, 600],
+      "credentials": {
+        "postgres": { "id": "5AWMkUroR4Less3r", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, id: $json.id, title: $json.title, category: $json.category, summary: $json.ai_summary }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "gu100000-0000-4000-8000-00000000000c",
+      "name": "Respond Screenshot OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1780, 600]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.source_url }}",
+        "options": {
+          "response": { "response": { "responseFormat": "text" } },
+          "timeout": 15000
+        }
+      },
+      "id": "gu100000-0000-4000-8000-00000000000d",
+      "name": "Fetch Blog Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 900],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = ($input.first().json.data || $input.first().json.body || '').toString();\nlet text = html\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n  .replace(/<!--[\\s\\S]*?-->/g, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&amp;/g, '&')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/\\s+/g, ' ')\n  .trim();\n// Claude has a context limit; a guideline blog post shouldn't need more than this.\ntext = text.slice(0, 60000);\n\nconst prep = $('Prepare Data').first().json;\nreturn [{ json: { ...prep, page_text: text } }];"
+      },
+      "id": "gu100000-0000-4000-8000-00000000000e",
+      "name": "Strip HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 900]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-sonnet-4-6\",\"max_tokens\":4000,\"system\":[{\"type\":\"text\",\"text\":\"You extract reference/guideline material for a content studio's internal knowledge base. Always return ONLY valid JSON, no markdown fences, no commentary.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":{{ JSON.stringify('Working title (may be empty): ' + ($json.title || '(none)') + '. Source URL: ' + ($json.source_url || '(none)') + '. Below is the raw text scraped from a blog page (nav/ad boilerplate may be mixed in - ignore it). (1) suggest a short 2-4 word title if the working title is generic, (2) classify its subject into a short free-text category (e.g. \\'Brand Voice\\', \\'SEO Rules\\', \\'Legal\\', \\'Design System\\' - pick whatever fits), (3) write a 2-3 sentence summary of what it covers and when to apply it, (4) extract just the main article text, dropping nav/ads/boilerplate. Return ONLY valid JSON with exactly these keys: title, category, summary, extracted_text.\\n\\nPage text:\\n' + $json.page_text) }}}]}]}",
+        "options": {}
+      },
+      "id": "gu100000-0000-4000-8000-00000000000f",
+      "name": "Claude - Analyze Blog Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 900],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": { "id": "h9HojADDLPyDuAp8", "name": "Header Auth account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '{}';\nlet txt = raw.trim();\nif (txt.startsWith('```')) { txt = txt.substring(txt.indexOf('\\n') + 1); if (txt.endsWith('```')) txt = txt.slice(0, -3); txt = txt.trim(); }\nlet parsed = {};\ntry { parsed = JSON.parse(txt); } catch (e) { parsed = {}; }\n\nconst prep = $('Prepare Data').first().json;\nreturn [{ json: {\n  source_type: 'blog',\n  title: (parsed.title || prep.title || 'Untitled guideline').toString(),\n  category: (parsed.category || 'Uncategorized').toString(),\n  summary: (parsed.summary || '').toString(),\n  extracted_text: (parsed.extracted_text || '').toString(),\n  file_b64: null,\n  file_mime_type: null,\n  source_url: prep.source_url\n} }];"
+      },
+      "id": "gu100000-0000-4000-8000-000000000010",
+      "name": "Parse Blog Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 900]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": { "__rl": true, "mode": "list", "value": "public" },
+        "table": { "__rl": true, "mode": "list", "value": "guideline_items" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source_type": "blog",
+            "title": "={{ $json.title }}",
+            "source_url": "={{ $json.source_url }}",
+            "extracted_text": "={{ $json.extracted_text }}",
+            "ai_category": "={{ $json.category }}",
+            "category": "={{ $json.category }}",
+            "ai_summary": "={{ $json.summary }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "gu100000-0000-4000-8000-000000000011",
+      "name": "Save Blog Guideline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [2000, 900],
+      "credentials": {
+        "postgres": { "id": "5AWMkUroR4Less3r", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, id: $json.id, title: $json.title, category: $json.category, summary: $json.ai_summary }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "gu100000-0000-4000-8000-000000000012",
+      "name": "Respond Blog OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2220, 900]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "guideline-confirm",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "gu200000-0000-4000-8000-000000000001",
+      "name": "Confirm Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 1200],
+      "webhookId": "ee335566-cccc-6666-dddd-eeff00112266"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json;\nconst d = (raw.body && raw.body.id !== undefined) ? raw.body : raw;\nreturn [{ json: {\n  id: d.id,\n  category: (d.category || 'Uncategorized').toString(),\n  summary: (d.summary || '').toString().slice(0, 3800)\n} }];"
+      },
+      "id": "gu200000-0000-4000-8000-000000000002",
+      "name": "Prepare Confirm Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 1200],
+      "notes": "summary is trimmed to fit OpenAI TTS's ~4096-char input cap."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/speech",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"tts-1\",\"voice\":\"alloy\",\"input\":{{ JSON.stringify($json.summary) }}}",
+        "options": {
+          "response": { "response": { "responseFormat": "file", "outputPropertyName": "data" } }
+        }
+      },
+      "id": "gu200000-0000-4000-8000-000000000003",
+      "name": "OpenAI TTS - Narrate Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 1200],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": { "id": "OPENAI_CRED_ID_HERE", "name": "OpenAI API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst audio_b64 = item.binary && item.binary.data ? item.binary.data.data : '';\nconst prep = $('Prepare Confirm Data').first().json;\nreturn [{ json: {\n  id: prep.id,\n  category: prep.category,\n  audio_b64\n} }];"
+      },
+      "id": "gu200000-0000-4000-8000-000000000004",
+      "name": "Encode Audio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 1200],
+      "notes": "n8n stores binary data as a base64 string internally, so item.binary.data.data is already what guideline_items.audio_b64 expects."
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": { "__rl": true, "mode": "list", "value": "public" },
+        "table": { "__rl": true, "mode": "list", "value": "guideline_items" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "category": "={{ $json.category }}",
+            "audio_b64": "={{ $json.audio_b64 }}",
+            "audio_mime_type": "audio/mpeg",
+            "status": "published"
+          },
+          "matchingColumns": ["id"]
+        },
+        "options": {}
+      },
+      "id": "gu200000-0000-4000-8000-000000000005",
+      "name": "Publish Guideline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1120, 1200],
+      "credentials": {
+        "postgres": { "id": "5AWMkUroR4Less3r", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, id: $json.id }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "gu200000-0000-4000-8000-000000000006",
+      "name": "Respond Confirm OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 1200]
+    }
+  ],
+  "connections": {
+    "Upload Webhook": {
+      "main": [[{ "node": "Prepare Data", "type": "main", "index": 0 }]]
+    },
+    "Prepare Data": {
+      "main": [[{ "node": "Is PDF?", "type": "main", "index": 0 }]]
+    },
+    "Is PDF?": {
+      "main": [
+        [{ "node": "Claude - Analyze PDF", "type": "main", "index": 0 }],
+        [{ "node": "Is Screenshot?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Screenshot?": {
+      "main": [
+        [{ "node": "Claude Vision - Analyze Screenshot", "type": "main", "index": 0 }],
+        [{ "node": "Fetch Blog Page", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude - Analyze PDF": {
+      "main": [[{ "node": "Parse PDF Result", "type": "main", "index": 0 }]]
+    },
+    "Parse PDF Result": {
+      "main": [[{ "node": "Save PDF Guideline", "type": "main", "index": 0 }]]
+    },
+    "Save PDF Guideline": {
+      "main": [[{ "node": "Respond PDF OK", "type": "main", "index": 0 }]]
+    },
+    "Claude Vision - Analyze Screenshot": {
+      "main": [[{ "node": "Parse Screenshot Result", "type": "main", "index": 0 }]]
+    },
+    "Parse Screenshot Result": {
+      "main": [[{ "node": "Save Screenshot Guideline", "type": "main", "index": 0 }]]
+    },
+    "Save Screenshot Guideline": {
+      "main": [[{ "node": "Respond Screenshot OK", "type": "main", "index": 0 }]]
+    },
+    "Fetch Blog Page": {
+      "main": [[{ "node": "Strip HTML", "type": "main", "index": 0 }]]
+    },
+    "Strip HTML": {
+      "main": [[{ "node": "Claude - Analyze Blog Text", "type": "main", "index": 0 }]]
+    },
+    "Claude - Analyze Blog Text": {
+      "main": [[{ "node": "Parse Blog Result", "type": "main", "index": 0 }]]
+    },
+    "Parse Blog Result": {
+      "main": [[{ "node": "Save Blog Guideline", "type": "main", "index": 0 }]]
+    },
+    "Save Blog Guideline": {
+      "main": [[{ "node": "Respond Blog OK", "type": "main", "index": 0 }]]
+    },
+    "Confirm Webhook": {
+      "main": [[{ "node": "Prepare Confirm Data", "type": "main", "index": 0 }]]
+    },
+    "Prepare Confirm Data": {
+      "main": [[{ "node": "OpenAI TTS - Narrate Summary", "type": "main", "index": 0 }]]
+    },
+    "OpenAI TTS - Narrate Summary": {
+      "main": [[{ "node": "Encode Audio", "type": "main", "index": 0 }]]
+    },
+    "Encode Audio": {
+      "main": [[{ "node": "Publish Guideline", "type": "main", "index": 0 }]]
+    },
+    "Publish Guideline": {
+      "main": [[{ "node": "Respond Confirm OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

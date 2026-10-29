@@ -1,0 +1,135 @@
+{
+  "name": "Utility - Shorten URL via TinyURL",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "shorten",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "su000000-0000-4000-8000-000000000001",
+      "name": "Shorten (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        304
+      ],
+      "webhookId": "shorten11-2222-3333-4444-555566667777"
+    },
+    {
+      "parameters": {
+        "url": "https://tinyurl.com/api-create.php",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $json.query.url }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "su000000-0000-4000-8000-000000000002",
+      "name": "Call TinyURL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        304
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = ($input.first().json.data || '').toString().trim();\nif (!raw.startsWith('http')) {\n  return [{ json: { ok: false, error: 'TinyURL returned: ' + raw } }];\n}\nreturn [{ json: { ok: true, shortlink: raw } }];"
+      },
+      "id": "su000000-0000-4000-8000-000000000003",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "su000000-0000-4000-8000-000000000004",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        864,
+        304
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Shorten (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Call TinyURL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call TinyURL": {
+      "main": [
+        [
+          {
+            "node": "Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ed256b0f-6f32-4602-b57e-f0207a8845cd",
+  "meta": {
+    "instanceId": "f9eb311d13df2d420f98ccbd585326d13017fbd9b15c20d6aaf7534345b8d29c"
+  },
+  "id": "shortenurl",
+  "tags": []
+}

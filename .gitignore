@@ -1,0 +1,21 @@
+# Environment variables — never commit real keys
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+npm-debug.log
+
+# Docker volumes (local data)
+postgres_data/
+n8n_data/
+appsmith_data/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log

@@ -110,40 +110,51 @@ class InspirationUpload(BaseModel):
     preview_mime_type: str | None = None
 
 
-@router.post("/inspiration-upload")
-def inspiration_upload(body: InspirationUpload):
-    if not body.file_b64:
-        raise HTTPException(400, "file_b64 is required")
-    is_video = body.type == "video"
-    context = f"Caption or context (may be empty): {body.caption or '(none)'}. "
+def save_inspiration(*, is_video: bool, file_b64: str, mime_type: str, caption: str = "",
+                     preview_b64: str | None = None, preview_mime_type: str | None = None,
+                     telegram_chat_id: str | None = None, telegram_message_id: str | None = None) -> dict:
+    """Tag an image (Claude) or video (Gemini) and store it. Shared by the dashboard upload and the Telegram bot.
+
+    Raises ai.AIError if the model call fails.
+    """
+    context = f"Caption or context (may be empty): {caption or '(none)'}. "
     cats = ", ".join(INSPIRATION_CATEGORIES)
-    try:
-        if is_video:
-            text = (context + f"This is a short trending video clip. Classify it into exactly one category from: {cats}. "
-                    "Write a 1-2 sentence summary of the hook or idea that makes it engaging and what content angle it "
-                    "suggests. List 3-5 short lowercase tags. Return ONLY valid JSON with exactly these keys: category, summary, tags.")
-            raw = ai.gemini_text(ai.gemini(ai.GEMINI_FLASH, {"contents": [{"parts": [
-                {"text": text}, {"inlineData": {"mimeType": body.mime_type, "data": body.file_b64}}]}]}))
-        else:
-            text = (context + f"Classify this image into exactly one category from: {cats}. Write a 1-2 sentence summary "
-                    "of what makes it trending or engaging and what content idea it suggests. List 3-5 short lowercase "
-                    "tags. Return ONLY valid JSON with exactly these keys: category, summary, tags.")
-            raw = ai.claude(model=ai.HAIKU, system=prompts.INSPIRATION_SYSTEM, max_tokens=500,
-                            content=[ai.image_block(body.file_b64, body.mime_type), {"type": "text", "text": text}])
-    except ai.AIError as e:
-        raise _upstream(e) from e
+    if is_video:
+        text = (context + f"This is a short trending video clip. Classify it into exactly one category from: {cats}. "
+                "Write a 1-2 sentence summary of the hook or idea that makes it engaging and what content angle it "
+                "suggests. List 3-5 short lowercase tags. Return ONLY valid JSON with exactly these keys: category, summary, tags.")
+        raw = ai.gemini_text(ai.gemini(ai.GEMINI_FLASH, {"contents": [{"parts": [
+            {"text": text}, {"inlineData": {"mimeType": mime_type, "data": file_b64}}]}]}))
+    else:
+        text = (context + f"Classify this image into exactly one category from: {cats}. Write a 1-2 sentence summary "
+                "of what makes it trending or engaging and what content idea it suggests. List 3-5 short lowercase "
+                "tags. Return ONLY valid JSON with exactly these keys: category, summary, tags.")
+        raw = ai.claude(model=ai.HAIKU, system=prompts.INSPIRATION_SYSTEM, max_tokens=500,
+                        content=[ai.image_block(file_b64, mime_type), {"type": "text", "text": text}])
     p = ai.parse_json(raw) or {}
     category = p.get("category") if p.get("category") in INSPIRATION_CATEGORIES else "other"
     summary = ai.as_str(p.get("summary"))
     tags = [str(t) for t in p.get("tags", [])[:5]] if isinstance(p.get("tags"), list) else []
-    preview_b64 = body.preview_b64 if is_video else body.file_b64
-    preview_mime = body.preview_mime_type if is_video else body.mime_type
-    execute(
-        "INSERT INTO inspiration_items (type, category, source_caption, preview_b64, preview_mime_type, ai_summary, ai_tags) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-        ("video" if is_video else "image", category, body.caption, preview_b64, preview_mime, summary, tags),
+    row = fetch_one(
+        "INSERT INTO inspiration_items (type, category, source_caption, preview_b64, preview_mime_type, ai_summary, "
+        "ai_tags, telegram_chat_id, telegram_message_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        ("video" if is_video else "image", category, caption, preview_b64 if is_video else file_b64,
+         preview_mime_type if is_video else mime_type, summary, tags, telegram_chat_id, telegram_message_id),
     )
-    return {"success": True, "category": category, "summary": summary}
+    return {"id": str(row["id"]), "category": category, "summary": summary, "tags": tags}
+
+
+@router.post("/inspiration-upload")
+def inspiration_upload(body: InspirationUpload):
+    if not body.file_b64:
+        raise HTTPException(400, "file_b64 is required")
+    try:
+        saved = save_inspiration(is_video=body.type == "video", file_b64=body.file_b64, mime_type=body.mime_type,
+                                 caption=body.caption, preview_b64=body.preview_b64,
+                                 preview_mime_type=body.preview_mime_type)
+    except ai.AIError as e:
+        raise _upstream(e) from e
+    return {"success": True, "category": saved["category"], "summary": saved["summary"]}
 
 
 # ── Guidelines ───────────────────────────────────────────────

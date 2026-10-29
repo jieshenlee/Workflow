@@ -347,6 +347,7 @@ export default function Inspiration() {
                     <span className={`pill ${item.type === 'video' ? 'pill-teal' : 'pill-purple'}`} style={{ fontSize: 10 }}>
                       {item.type === 'video' ? 'Video' : 'Photo'}
                     </span>
+                    {item.telegram_chat_id && <span className="pill pill-blue" style={{ fontSize: 10 }}>Telegram</span>}
                   </div>
                 </div>
               </button>
@@ -371,6 +372,7 @@ export default function Inspiration() {
                   <span className={`pill ${selected.type === 'video' ? 'pill-teal' : 'pill-purple'}`}>
                     {selected.type === 'video' ? 'Video' : 'Photo'}
                   </span>
+                  {selected.telegram_chat_id && <span className="pill pill-blue">via Telegram</span>}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
                   {new Date(selected.created_at).toLocaleString()}

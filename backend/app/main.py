@@ -13,13 +13,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .db import close_pool, fetch_one
 from .routers import blog, image_gen, tools
+from .telegram import poller
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    poller.start()
     yield
+    poller.stop()
     close_pool()
 
 
@@ -40,5 +43,11 @@ def health():
             "gemini": bool(settings.gemini_api_key),
             "openai": bool(settings.openai_api_key),
             "sanity": bool(settings.sanity_api_token),
+        },
+        "telegram": {
+            "configured": bool(settings.telegram_bot_token),
+            "polling": poller.running,
+            "allowed_chats": len(settings.telegram_allowed_chat_ids),
+            "last_error": poller.last_error,
         },
     }

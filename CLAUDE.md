@@ -69,15 +69,17 @@ No approval gate; it's a personal swipe file, not published content.
 
 ```
 Trending photo or video found on IG / TikTok / X / YouTube / web
-  → Upload via dashboard (/inspiration) — Telegram-bot capture was the original plan, not built
-    → API: POST /api/inspiration-upload
+  → Share / forward to the Telegram bot (photo, video, or post link), or upload via dashboard (/inspiration)
+    → API: Telegram poller (backend/app/telegram.py — no public URL needed) or POST /api/inspiration-upload
+      → Link: yt-dlp downloads the video
       → Photo: download → Claude Vision tags category + summary
       → Video: download → Gemini analyzes clip directly (no frame extraction/ffmpeg) → tags category + summary
         → Store in `inspiration_items` (category, summary, tags, preview image)
           → Brainstorm stage queries by category for fresh angles
 ```
 
-Code: `backend/app/routers/tools.py` (`inspiration_upload`).
+Code: `backend/app/telegram.py` (bot) and `backend/app/routers/tools.py` (`save_inspiration`).
+Setup: `backend/README.md` → Telegram inspiration bot.
 
 ### Branch 4 — Guidelines Capture (reference library, single approval gate)
 
@@ -135,7 +137,7 @@ Every approval stage must pause the workflow and surface content in the React da
 | File storage | **Cloudflare R2** or **AWS S3** | Stores generated images and video files |
 | URL shortening | **Bitly API** | Free tier covers basic usage |
 | Social scheduling | **Metricool** (SaaS) | Free tier covers Facebook, Instagram, Threads, TikTok, YouTube, Pinterest — dashboard generates captions, you copy them into Metricool's UI. Paid plans ($18/mo+) unlock REST API access so the backend can schedule directly. Switched back from Postiz 2026-06-01 — self-host scheduler was too much infrastructure (Temporal + Elasticsearch + per-platform OAuth dev apps) for MVP-stage scheduling needs. |
-| Inspiration capture | **Telegram Bot API** | Zero-friction mobile capture — most social apps support native "Share → Telegram." Single bot/webhook ingests both photos and videos for Branch 3 (see above), avoiding fragile per-platform scrapers. |
+| Inspiration capture | **Telegram Bot API** | Zero-friction mobile capture — most social apps support native "Share → Telegram." One bot ingests photos, videos and post links for Branch 3 (see above). It long-polls from the API, so no public URL or tunnel is needed. |
 | Guideline narration | **OpenAI TTS** (`tts-1`) | Narrates the AI-generated summary of each confirmed guideline for Branch 4 (see above). Reuses the existing `OPENAI_API_KEY` — no new key needed. |
 | Containerisation | **Docker Desktop** | Runs Postgres + API + PostgREST + dashboard locally with one command (`docker compose up -d`) |
 | Version control | **Git + GitHub** | Track workflow configs and dashboard code |

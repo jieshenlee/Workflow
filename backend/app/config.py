@@ -27,5 +27,10 @@ class Settings:
     sanity_api_token: str = field(default_factory=lambda: _env("SANITY_API_TOKEN"))
     site_url: str = field(default_factory=lambda: _env("SITE_URL", "https://project-digital-website.vercel.app").rstrip("/"))
 
+    # Inspiration bot. Polling starts only when a token is set.
+    telegram_bot_token: str = field(default_factory=lambda: _env("TELEGRAM_BOT_TOKEN"))
+    telegram_allowed_chat_ids: frozenset[str] = field(default_factory=lambda: frozenset(
+        c.strip() for c in _env("TELEGRAM_ALLOWED_CHAT_IDS").split(",") if c.strip()))
+
 
 settings = Settings()

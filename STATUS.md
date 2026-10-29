@@ -33,7 +33,7 @@ See `backend/README.md` for the layout, endpoints and how gates work.
 2. Run `db/migrate-python-backend.sql`. It re-points gates still waiting on n8n at the API.
 3. Run any `db/migrate-*.sql` you hadn't run yet. Restart postgrest after DDL.
 4. Make sure `.env` has `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`
-   and `SANITY_API_TOKEN`. Before, these lived in n8n credentials; now the
+   and `SANITY_API_TOKEN` (plus, optionally, `TELEGRAM_BOT_TOKEN` for the bot). Before, these lived in n8n credentials; now the
    API reads them from `.env`.
 5. Open http://localhost:8000/health, then run a test topic end to end.
 
@@ -68,8 +68,12 @@ Metricool paid; the plan is in `legacy/n8n/workflows/schedule-social.README.md`.
   caption URL without yt-dlp was tried and abandoned (0-byte responses).
 - **Guidelines:** PPT isn't supported; export to PDF first. Confirming a
   guideline narrates its summary with OpenAI TTS (`tts-1`).
-- **Inspiration:** dashboard upload. The Telegram-bot capture in
-  CLAUDE.md was never built.
+- **Inspiration:** dashboard upload, **or the Telegram bot (built 2026-10-29)**.
+  Share or forward a photo, video or post link to the bot and it's tagged
+  and saved, then the bot replies with the category. It polls Telegram,
+  so there's no tunnel or public URL. It's off until `TELEGRAM_BOT_TOKEN`
+  is set; setup is in `backend/README.md`. Only allow-listed chat ids are
+  processed. Tested with a faked Telegram only; first real message pending.
 
 ---
 

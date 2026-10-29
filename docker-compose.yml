@@ -50,6 +50,8 @@ services:
       SANITY_DATASET: ${SANITY_DATASET:-production}
       SANITY_API_TOKEN: ${SANITY_API_TOKEN:-}
       SITE_URL: ${SITE_URL:-https://project-digital-website.vercel.app}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_ALLOWED_CHAT_IDS: ${TELEGRAM_ALLOWED_CHAT_IDS:-}
     volumes:
       - ./backend:/srv/backend
       - ./prompts:/srv/prompts:ro

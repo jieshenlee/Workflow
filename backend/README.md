@@ -26,6 +26,7 @@ app/
     blog.py        start/upload blog, approvals, retry, meta, publish, repurpose, shorten
     tools.py       image maker, image checker, inspiration, guidelines, video templates
     image_gen.py   Image Gen draft + render
+  telegram.py      Telegram inspiration bot (background poller)
 tests/             pytest against a real Postgres; all external APIs faked
 ```
 
@@ -51,6 +52,27 @@ dashboard only changed URLs.
 | `POST /api/video-template-extract` | `video-template-extract` | yt-dlp now runs in-process, so the `transcript-service` sidecar is gone |
 | `POST /api/image-gen/draft` / `render` | `image-gen-draft` / `-render` | Sizes render in parallel |
 
+## Telegram inspiration bot
+
+Share or forward a photo, a video, or a post link (TikTok, X, YouTube…)
+to your bot. The API downloads it, tags it the same way as a dashboard
+upload, saves it to `/inspiration` (marked **Telegram**), and replies
+with the category and summary. It uses long polling, so it needs **no
+public URL or tunnel**; it runs as a background thread in the API.
+
+Setup (about 3 minutes):
+1. In Telegram, message **@BotFather** → `/newbot` → pick a name → copy the token.
+2. In `.env`, set `TELEGRAM_BOT_TOKEN=<token>`, then run `docker compose up -d --force-recreate api`.
+3. Message your bot anything. It replies "This bot is private… add <your id> to TELEGRAM_ALLOWED_CHAT_IDS".
+4. Set `TELEGRAM_ALLOWED_CHAT_IDS=<that id>` in `.env` and recreate the api container again. Done.
+
+Only allow-listed chats are processed, so strangers who find the bot
+can't spend your AI credits. `/health` shows whether it's polling and the
+last error. Limits: photos ≤ 5 MB (Claude), videos ≤ 20 MB (Telegram's
+bot download cap). Links are fetched with yt-dlp. Private or login-only
+posts (often Instagram) can't be downloaded; save the video and send it
+as a file instead.
+
 ## How approval gates work
 
 n8n paused a running execution at a Wait node. The API keeps no paused
@@ -75,6 +97,7 @@ Passed through from `.env` by docker-compose.
 | `ANTHROPIC_API_KEY` | every Claude step |
 | `GEMINI_API_KEY` | blog hero (Imagen 4), Image Maker, Image Gen, video analysis, inspiration videos |
 | `OPENAI_API_KEY` | guideline narration (TTS) |
+| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_CHAT_IDS` | Telegram inspiration bot (optional; off when unset) |
 | `SANITY_API_TOKEN` (+ `SANITY_PROJECT_ID`, `SANITY_DATASET`, `SITE_URL`) | Publish to Sanity |
 | `DATABASE_URL` | set by compose; override when running outside Docker |
 | `PUBLIC_API_URL` | the API's URL as the browser sees it (default `http://localhost:8000`) |

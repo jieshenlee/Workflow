@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { N8N_VIDEO_TEMPLATE_URL, pgDelete, pgGet } from '../lib/api'
+import { API_VIDEO_TEMPLATE_URL, pgDelete, pgGet } from '../lib/api'
 import { exportChecklistExcel, exportChecklistPptx } from '../lib/export'
 import type { ChecklistItem, VideoTemplate, VideoTemplateMode } from '../lib/types'
 import { PageHeader } from '../components/ui/PageHeader'
@@ -101,18 +101,18 @@ export default function VideoTemplates() {
     setSubmitting(true)
     setSubmitError(null)
     try {
-      const res = await fetch(N8N_VIDEO_TEMPLATE_URL, {
+      const res = await fetch(API_VIDEO_TEMPLATE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ youtube_url: url, mode }),
       })
-      if (!res.ok) throw new Error(`n8n responded ${res.status} — is the workflow active?`)
+      if (!res.ok) throw new Error(`API responded ${res.status}: ${await res.text().catch(() => '')}`)
       const text = await res.text()
       let data: any
       try {
         data = JSON.parse(text)
       } catch {
-        throw new Error('n8n returned an empty or invalid response — the workflow likely failed before it could respond. Check the n8n execution log.')
+        throw new Error('API returned an invalid response — check docker compose logs api.')
       }
       if (!data.success) throw new Error(data.error || 'Gemini could not extract a template from this video')
       setResult({

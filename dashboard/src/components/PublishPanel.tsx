@@ -1,6 +1,6 @@
 ﻿import { useState, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { N8N_GENERATE_META_URL, N8N_PUBLISH_CMS_URL, n8nPost, pgPatch, pgPost, shortenUrl } from '../lib/api'
+import { API_GENERATE_META_URL, API_PUBLISH_CMS_URL, apiPost, pgPatch, pgPost, shortenUrl } from '../lib/api'
 import type { CmsFields, ContentJob, GeneratedImage } from '../lib/types'
 import { I } from './ui/Icon'
 import { useToast } from './ui/Toast'
@@ -10,8 +10,8 @@ type JobForPublish = ContentJob & { generated_images?: GeneratedImage[] }
 
 const BLOG_BASE_URL = 'https://project-digital-website.vercel.app/blog'
 
-// Categories — auto-created in Sanity on first publish via the n8n
-// publish-cms workflow's createIfNotExists. Add/rename here as the blog grows.
+// Categories — auto-created in Sanity on first publish via the API's
+// publish-cms createIfNotExists. Add/rename here as the blog grows.
 const BLOG_CATEGORIES = [
   'Superhero & Comics',
   'Animation',
@@ -125,10 +125,10 @@ export function PublishPanel({ job }: { job: JobForPublish }) {
     },
   })
 
-  // Excerpt + alt are AI-generated server-side (n8n calls Claude and responds
-  // with the text). Falls back to a graceful error if that workflow isn't built.
+  // Excerpt + alt are AI-generated server-side (the API calls Claude and
+  // responds with the text).
   const genExcerpt = useMutation({
-    mutationFn: () => n8nPost(N8N_GENERATE_META_URL, { job_id: job.id, field: 'excerpt' }),
+    mutationFn: () => apiPost(API_GENERATE_META_URL, { job_id: job.id, field: 'excerpt' }),
     onSuccess: res => {
       const v = (res as { excerpt?: string })?.excerpt
       if (v) set('excerpt', String(v))
@@ -136,7 +136,7 @@ export function PublishPanel({ job }: { job: JobForPublish }) {
     },
   })
   const genAlt = useMutation({
-    mutationFn: () => n8nPost(N8N_GENERATE_META_URL, { job_id: job.id, field: 'alt' }),
+    mutationFn: () => apiPost(API_GENERATE_META_URL, { job_id: job.id, field: 'alt' }),
     onSuccess: res => {
       const v = (res as { alt?: string; cover_alt?: string })?.alt ?? (res as { cover_alt?: string })?.cover_alt
       if (v) set('cover_alt', String(v))
@@ -144,7 +144,7 @@ export function PublishPanel({ job }: { job: JobForPublish }) {
     },
   })
   const genMetaTitle = useMutation({
-    mutationFn: () => n8nPost(N8N_GENERATE_META_URL, { job_id: job.id, field: 'meta_title' }),
+    mutationFn: () => apiPost(API_GENERATE_META_URL, { job_id: job.id, field: 'meta_title' }),
     onSuccess: res => {
       const v = (res as { meta_title?: string })?.meta_title
       if (v) set('meta_title', String(v))
@@ -152,7 +152,7 @@ export function PublishPanel({ job }: { job: JobForPublish }) {
     },
   })
   const genMetaDescription = useMutation({
-    mutationFn: () => n8nPost(N8N_GENERATE_META_URL, { job_id: job.id, field: 'meta_description' }),
+    mutationFn: () => apiPost(API_GENERATE_META_URL, { job_id: job.id, field: 'meta_description' }),
     onSuccess: res => {
       const v = (res as { meta_description?: string })?.meta_description
       if (v) set('meta_description', String(v))
@@ -161,9 +161,9 @@ export function PublishPanel({ job }: { job: JobForPublish }) {
   })
 
   const publish = useMutation({
-    mutationFn: (body: CmsFields) => n8nPost(N8N_PUBLISH_CMS_URL, { job_id: job.id, ...body }),
+    mutationFn: (body: CmsFields) => apiPost(API_PUBLISH_CMS_URL, { job_id: job.id, ...body }),
     onSuccess: () => {
-      toast.notify('Sent to Sanity — publishing…')
+      toast.notify('Published to Sanity')
       queryClient.invalidateQueries({ queryKey: ['job', job.id] })
       queryClient.invalidateQueries({ queryKey: ['jobs'] })
     },
@@ -359,8 +359,8 @@ export function PublishPanel({ job }: { job: JobForPublish }) {
             </button>
           </div>
           {save.isError && <p style={{ margin: 0, fontSize: 12.5, color: 'var(--red)' }}>Save failed: <span className="mono">{String(save.error)}</span></p>}
-          {genError && <p style={{ margin: 0, fontSize: 12.5, color: 'var(--amber)' }}>Generate needs the n8n <span className="mono">generate-meta</span> workflow (not built yet).</p>}
-          {publish.isError && <p style={{ margin: 0, fontSize: 12.5, color: 'var(--amber)' }}>Publish needs the n8n <span className="mono">publish-cms</span> workflow (not built yet). Fields still save with "Save fields".</p>}
+          {genError && <p style={{ margin: 0, fontSize: 12.5, color: 'var(--amber)' }}>Generate failed — is the API running? Check <span className="mono">docker compose logs api</span>.</p>}
+          {publish.isError && <p style={{ margin: 0, fontSize: 12.5, color: 'var(--amber)' }}>Publish failed: {String(publish.error)}. Fields still save with "Save fields".</p>}
         </div>
       )}
     </div>

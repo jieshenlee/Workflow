@@ -1,10 +1,10 @@
-// Image Gen helpers: size table, the draft/render webhook calls, and the
+// Image Gen helpers: size table, the draft/render API calls, and the
 // exact-size crop applied on download.
 
-import { N8N_IMAGE_GEN_DRAFT_URL, N8N_IMAGE_GEN_RENDER_URL, n8nPost, pgPatch, pgPost } from './api'
+import { API_IMAGE_GEN_DRAFT_URL, API_IMAGE_GEN_RENDER_URL, apiPost, pgPatch, pgPost } from './api'
 import type { BrandProject, BrandReference, BriefCheck, ImageGenGeneration, ImageGenJob, ImageGenSize } from './types'
 
-// Keep in sync with SIZES in the "Build Requests" node of workflows/image-gen-render.json.
+// Keep in sync with SIZES in backend/app/routers/image_gen.py.
 // Gemini renders at the aspect ratio; the exact pixel size is applied by cropToSize on download.
 export const SIZES: Record<ImageGenSize, { label: string; aspect: string; w: number; h: number; hint: string }> = {
   post:     { label: 'Square post',   aspect: '1:1',  w: 1080, h: 1080, hint: 'Instagram / Facebook / LinkedIn feed' },
@@ -51,7 +51,7 @@ export async function draftPrompt(args: {
   previousPrompt?: string
   changeNote?: string
 }): Promise<DraftResult> {
-  const data = await n8nPost(N8N_IMAGE_GEN_DRAFT_URL, {
+  const data = await apiPost(API_IMAGE_GEN_DRAFT_URL, {
     ask: args.ask,
     brand_name: args.brand.name,
     brief: args.brand.brief,
@@ -64,7 +64,7 @@ export async function draftPrompt(args: {
   return data
 }
 
-/** Writes a queued job + one generation row per size, then kicks the render workflow. */
+/** Writes a queued job + one generation row per size, then asks the API to render it. */
 export async function queueJob(args: {
   brandId: string
   ask: string
@@ -93,11 +93,11 @@ export async function queueJob(args: {
 
 export async function startRender(jobId: string) {
   try {
-    await n8nPost(N8N_IMAGE_GEN_RENDER_URL, { job_id: jobId })
+    await apiPost(API_IMAGE_GEN_RENDER_URL, { job_id: jobId })
   } catch (err) {
     await pgPatch(`/image_gen_jobs?id=eq.${jobId}`, {
       status: 'failed',
-      error: `Could not start render workflow: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Could not start render: ${err instanceof Error ? err.message : String(err)}`,
     })
     throw err
   }

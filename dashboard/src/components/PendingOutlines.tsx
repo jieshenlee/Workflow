@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { n8nPost, pgGet } from '../lib/api'
+import { apiPost, pgGet } from '../lib/api'
 import type { ApprovalStage, ContentJob } from '../lib/types'
 import { AIBadge } from './ui/Badges'
 import { I } from './ui/Icon'
@@ -78,7 +78,7 @@ export function OutlineCard({ approval }: { approval: PendingOutline }) {
   const mutation = useMutation({
     mutationFn: async () => {
       if (!approval.resume_url) throw new Error('No resume_url on approval row')
-      return n8nPost(approval.resume_url, {
+      return apiPost(approval.resume_url, {
         outline_notes: notes.trim(),
       })
     },

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { N8N_IMAGE_CHECK_URL, n8nPost, pgDelete, pgGet, pgPatch, pgPost } from '../lib/api'
+import { API_IMAGE_CHECK_URL, apiPost, pgDelete, pgGet, pgPatch, pgPost } from '../lib/api'
 import type { ImageCheck, ImageCheckStatus, ImageCheckVerdict } from '../lib/types'
 import { PageHeader } from '../components/ui/PageHeader'
 import { I } from '../components/ui/Icon'
@@ -42,7 +42,7 @@ function fileToBase64(file: File): Promise<{ b64: string; mime: string }> {
 
 async function runCheck(check: ImageCheck) {
   try {
-    const data = await n8nPost(N8N_IMAGE_CHECK_URL, {
+    const data = await apiPost(API_IMAGE_CHECK_URL, {
       request_text: check.request_text,
       image_b64: check.image_b64,
       mime_type: check.mime_type,

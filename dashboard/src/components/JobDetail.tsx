@@ -2,7 +2,7 @@ import { Fragment, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { N8N_REPURPOSE_SOCIAL_URL, n8nPost, pgDelete, pgGet, pgPatch, shortenUrl } from '../lib/api'
+import { API_REPURPOSE_SOCIAL_URL, apiJobRetryUrl, apiPost, pgDelete, pgGet, pgPatch, shortenUrl } from '../lib/api'
 import type { ApprovalStage, ContentJob, GeneratedImage, JobStatus, PlatformCaption } from '../lib/types'
 import { PageHeader } from './ui/PageHeader'
 import { StatusPill } from './ui/Badges'
@@ -168,11 +168,7 @@ export default function JobDetail({ jobId, onBack }: { jobId: string; onBack: ()
           <PageHeader
             title={job.topic}
             breadcrumb={['Project Digital', job.branch === 'social' ? 'Social Jobs' : 'Blog Jobs', 'Job']}
-            actions={
-              <a href="http://localhost:5678" target="_blank" rel="noreferrer" className="btn btn-outline btn-sm">
-                <I.external size={13} /> n8n
-              </a>
-            }
+            actions={job.status === 'failed' ? <RetryButton jobId={job.id} /> : undefined}
             meta={
               <>
                 <StatusPill status={job.status} />
@@ -186,12 +182,48 @@ export default function JobDetail({ jobId, onBack }: { jobId: string; onBack: ()
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 18 }}>
             <Stepper steps={buildSteps(job, pending?.stage_number)} />
 
+            {job.status === 'failed' && <FailedNotice job={job} />}
+
             {pending && <PendingAction pending={pending} jobId={jobId} />}
             <ProjectContent job={job} pendingStage={pending?.stage_number} />
           </div>
         </>
       )}
     </>
+  )
+}
+
+function FailedNotice({ job }: { job: JobWithImages }) {
+  const err = (job.data as { error?: { step?: string; message?: string } } | null)?.error
+  return (
+    <div className="card" style={{ borderColor: 'var(--red-100)', background: 'var(--red-50)' }}>
+      <div className="card-body" style={{ color: 'var(--red)', fontSize: 13 }}>
+        <div>{err ? <>The <b>{err.step}</b> step failed: <span className="mono">{err.message}</span></> : 'This job failed.'}</div>
+        <div style={{ marginTop: 6, color: 'var(--text-2)' }}>
+          Fix the cause (API key, quota…) and click <b>Retry step</b> — your earlier approvals are kept.
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RetryButton({ jobId }: { jobId: string }) {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  const retry = useMutation({
+    mutationFn: () => apiPost(apiJobRetryUrl(jobId), {}),
+    onSuccess: () => toast.notify('Retrying — this can take a minute…'),
+    onError: e => toast.notify(String(e)),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['job', jobId] })
+      queryClient.invalidateQueries({ queryKey: ['job-pending', jobId] })
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    },
+  })
+  return (
+    <button className="btn btn-outline btn-sm" disabled={retry.isPending} onClick={() => retry.mutate()}>
+      <I.refresh size={13} /> {retry.isPending ? 'Retrying…' : 'Retry step'}
+    </button>
   )
 }
 
@@ -220,7 +252,7 @@ function GenericApprove({ pending, jobId }: { pending: PendingForJob; jobId: str
   const mutation = useMutation({
     mutationFn: async () => {
       if (!pending.resume_url) throw new Error('No resume_url on approval row')
-      return n8nPost(pending.resume_url, { notes: notes.trim() })
+      return apiPost(pending.resume_url, { notes: notes.trim() })
     },
     onSuccess: () => {
       toast.notify('Approved — workflow resuming…')
@@ -309,7 +341,7 @@ function ProjectContent({ job, pendingStage }: { job: JobWithImages; pendingStag
       // Wipe any existing captions + stage-5 gate so we always generate fresh.
       await pgDelete(`/platform_captions?job_id=eq.${job.id}`)
       await pgDelete(`/approval_stages?job_id=eq.${job.id}&stage_number=eq.5`)
-      return n8nPost(N8N_REPURPOSE_SOCIAL_URL, {
+      return apiPost(API_REPURPOSE_SOCIAL_URL, {
         job_id: job.id,
         platforms: ['linkedin', 'x', 'instagram'],
         content_type: 'static',

@@ -1,7 +1,7 @@
 # Image Gen — Draft Prompt + Brief Check
 
 **Stage:** Image Gen (standalone tool, `/image-gen`) — step 1 "Draft"
-**Used by:** `workflows/image-gen-draft.json` — "Claude Draft Prompt" node (inlined in the "Parse Input" Code node — keep the two in sync)
+**Used by:** `POST /api/image-gen/draft` (`backend/app/routers/image_gen.py`). The `## System` section below is loaded at runtime, so edits here take effect on the next draft.
 **Model:** claude-haiku-4-5-20251001 (vision — reads the selected reference images)
 **Variables:** `{{BRAND_NAME}}`, `{{BRIEF}}`, `{{ASK}}`, `{{SIZES}}`, and on a "request changes" loop `{{PREVIOUS_PROMPT}}` + `{{CHANGE_NOTE}}`
 

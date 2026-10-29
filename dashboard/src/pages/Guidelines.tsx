@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { N8N_GUIDELINE_CONFIRM_URL, N8N_GUIDELINE_UPLOAD_URL, pgDelete, pgGet } from '../lib/api'
+import { API_GUIDELINE_CONFIRM_URL, API_GUIDELINE_UPLOAD_URL, pgDelete, pgGet } from '../lib/api'
 import type { GuidelineItem, GuidelineSourceType } from '../lib/types'
 import { PageHeader } from '../components/ui/PageHeader'
 import { I } from '../components/ui/Icon'
@@ -94,12 +94,12 @@ export default function Guidelines() {
       } else {
         body.source_url = blogUrl.trim()
       }
-      const res = await fetch(N8N_GUIDELINE_UPLOAD_URL, {
+      const res = await fetch(API_GUIDELINE_UPLOAD_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (!res.ok) throw new Error(`n8n responded ${res.status} — is the workflow active?`)
+      if (!res.ok) throw new Error(`API responded ${res.status}: ${await res.text().catch(() => '')}`)
       const result = await res.json()
       setUploadResult(result)
       resetUploadForm()
@@ -116,12 +116,12 @@ export default function Guidelines() {
     if (!category) return
     setConfirmingId(item.id)
     try {
-      const res = await fetch(N8N_GUIDELINE_CONFIRM_URL, {
+      const res = await fetch(API_GUIDELINE_CONFIRM_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: item.id, category, summary: item.ai_summary || '' }),
       })
-      if (!res.ok) throw new Error(`n8n responded ${res.status} — is the workflow active?`)
+      if (!res.ok) throw new Error(`API responded ${res.status}: ${await res.text().catch(() => '')}`)
       queryClient.invalidateQueries({ queryKey: ['guideline-items'] })
     } catch (e: any) {
       window.alert(`Confirm failed: ${e.message}`)

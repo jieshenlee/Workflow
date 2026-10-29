@@ -71,7 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_image_gen_jobs_brand      ON image_gen_jobs (bran
 CREATE INDEX IF NOT EXISTS idx_image_gen_jobs_status     ON image_gen_jobs (status);
 CREATE INDEX IF NOT EXISTS idx_image_gen_jobs_created_at ON image_gen_jobs (created_at DESC);
 
--- One row per (job, size). The render workflow fills image_b64; the
+-- One row per (job, size). The API render step fills image_b64; the
 -- dashboard records the human review decision.
 CREATE TABLE IF NOT EXISTS image_gen_generations (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),

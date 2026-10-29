@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { pgGet } from '../../lib/api'
+import { API_URL, pgGet } from '../../lib/api'
 import type { ContentJob } from '../../lib/types'
 import { I } from './Icon'
 import { useJobNav } from './JobNav'
@@ -120,12 +120,12 @@ export function Sidebar({ current, onNav }: Props) {
           <div className="sb-user-role">Solo creator</div>
         </div>
         <a
-          href="http://localhost:5678"
+          href={`${API_URL}/docs`}
           target="_blank"
           rel="noreferrer"
           className="btn btn-ghost btn-sm"
           style={{ padding: 5, color: 'var(--sidebar-text-muted)' }}
-          title="Open n8n"
+          title="Open API docs"
         >
           <I.external size={14} />
         </a>

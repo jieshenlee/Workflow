@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { n8nPost, pgGet } from '../lib/api'
+import { apiPost, pgGet } from '../lib/api'
 import type { ApprovalStage, ContentJob, GeneratedImage } from '../lib/types'
 import { AIBadge } from './ui/Badges'
 import { I } from './ui/Icon'
@@ -73,7 +73,7 @@ export function ImageCard({ approval }: { approval: PendingImage }) {
   const mutation = useMutation({
     mutationFn: async () => {
       if (!approval.resume_url) throw new Error('No resume_url on approval row')
-      return n8nPost(approval.resume_url, { image_notes: notes.trim() })
+      return apiPost(approval.resume_url, { image_notes: notes.trim() })
     },
     onSuccess: () => {
       toast.notify('Image approved — moving to CMS publishing…')
@@ -117,7 +117,7 @@ export function ImageCard({ approval }: { approval: PendingImage }) {
         ) : (
           <div className="card" style={{ borderColor: 'var(--red-100)', background: 'var(--red-50)' }}>
             <div className="card-body" style={{ color: 'var(--red)', fontSize: 13 }}>
-              No image attached to this approval. Check the n8n execution for errors.
+              No image attached to this approval. Check the API logs (docker compose logs api) for errors.
             </div>
           </div>
         )}

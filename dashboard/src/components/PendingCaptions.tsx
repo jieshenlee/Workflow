@@ -1,6 +1,6 @@
 ﻿import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { n8nPost, pgGet, pgPatch, shortenUrl } from '../lib/api'
+import { apiPost, pgGet, pgPatch, shortenUrl } from '../lib/api'
 import type { ApprovalStage, ContentJob, Platform, PlatformCaption } from '../lib/types'
 import { AIBadge } from './ui/Badges'
 import { I } from './ui/Icon'
@@ -146,7 +146,7 @@ export function CaptionsCard({ approval }: { approval: PendingCaption }) {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      // Persist edits + mark each platform caption approved, then resume n8n.
+      // Persist edits + mark each platform caption approved, then resume the gate.
       await Promise.all(
         ordered.map(c =>
           pgPatch(`/platform_captions?id=eq.${c.id}`, {
@@ -156,7 +156,7 @@ export function CaptionsCard({ approval }: { approval: PendingCaption }) {
         ),
       )
       if (!approval.resume_url) throw new Error('No resume_url on approval row')
-      return n8nPost(approval.resume_url, { approved: true })
+      return apiPost(approval.resume_url, { approved: true })
     },
     onSuccess: () => {
       toast.notify('Captions approved — workflow resuming…')

@@ -20,6 +20,7 @@ import { Sidebar } from './components/ui/Sidebar'
 import type { NavKey } from './components/ui/Sidebar'
 import { PageHeader } from './components/ui/PageHeader'
 import { I } from './components/ui/Icon'
+import { API_URL } from './lib/api'
 import { JobNavProvider } from './components/ui/JobNav'
 import JobDetail from './components/JobDetail'
 
@@ -71,12 +72,12 @@ function DashboardPage() {
         breadcrumb={['Project Digital', 'Dashboard']}
         actions={
           <a
-            href="http://localhost:5678"
+            href={`${API_URL}/docs`}
             target="_blank"
             rel="noreferrer"
             className="btn btn-outline btn-sm"
           >
-            <I.external size={13} /> n8n
+            <I.external size={13} /> API
           </a>
         }
       />

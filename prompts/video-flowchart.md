@@ -1,7 +1,7 @@
 # Video to Flowchart — Tutorial Process Extraction
 
 **Stage:** Branch 5 (Video to Template), mode = flowchart
-**Used by:** `workflows/video-template-extract.json` — "Claude - Extract Flowchart" node
+**Used by:** the API's Claude fallback in `backend/app/routers/tools.py` (`VIDEO_CLAUDE_FLOWCHART` in `backend/app/prompts.py`, ported verbatim from the n8n node)
 **Model:** claude-sonnet-4-6 (needs to read a full transcript well, same tier as PDF/blog analysis in Branch 4)
 **Variables:** `{{TRANSCRIPT}}` — the video's caption track, scraped from YouTube (see the workflow README for why this replaced Gemini watching the video directly by URL)
 

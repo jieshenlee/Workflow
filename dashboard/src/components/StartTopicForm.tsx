@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { N8N_START_BLOG_URL, n8nPost } from '../lib/api'
+import { API_START_BLOG_URL, apiPost } from '../lib/api'
 import { I } from './ui/Icon'
 
 export default function StartTopicForm() {
@@ -8,7 +8,7 @@ export default function StartTopicForm() {
   const queryClient = useQueryClient()
 
   const mutation = useMutation({
-    mutationFn: (t: string) => n8nPost(N8N_START_BLOG_URL, { topic: t }),
+    mutationFn: (t: string) => apiPost(API_START_BLOG_URL, { topic: t }),
     onSuccess: () => {
       setTopic('')
       queryClient.invalidateQueries({ queryKey: ['jobs'] })

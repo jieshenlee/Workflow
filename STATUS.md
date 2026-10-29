@@ -10,122 +10,66 @@ _Last updated: 2026-10-29_
 
 ## TL;DR for a new chat
 
-**Stages 1–4 are working end-to-end** in n8n + the React dashboard:
-Brainstorm → Outline → Draft → Image. A job has gone all the way to `cms`
-(Ready to publish) with a real AI-generated hero image saved.
+**2026-10-29: n8n is gone. Everything runs on a Python (FastAPI) backend
+in `backend/`.** Every n8n workflow the dashboard calls was ported
+one-for-one (same prompts, models and request/response shapes) into plain Python with
+tests. n8n, Appsmith and the `transcript-service` sidecar are out of
+`docker-compose.yml`. The old workflow JSON is archived in `legacy/n8n/`.
+See `backend/README.md` for the layout, endpoints and how gates work.
 
-**Stage 5 (Publish to Sanity CMS) is fully built on the dashboard side and
-mid-wiring on the n8n side.** Sanity project = `p9audgmp` / `production`.
-Dashboard has a collapsible publish panel with all the Sanity fields
-(title, slug, author, category, excerpt, cover + alt, meta title +
-description), each auto-prefilled, AI-generate buttons per field, and a
-pre-publish review modal that lists missing sections and applies sensible
-defaults on confirm. Three importable n8n workflows ready in `workflows/`:
-- `publish-cms.json` — pushes the post to Sanity
-- `generate-meta.json` — Claude writes excerpt / alt / meta_title / meta_description on demand
-- `repurpose-social.json` — turns the blog into LinkedIn / X / Meta captions
+**What changed in practice:**
+- Approval gates are DB rows whose `resume_url` points at the API
+  (`/api/approvals/<id>/resume`). There are no paused executions, so jobs
+  survive restarts.
+- A failed AI step marks the job `failed` with the reason. The job page
+  shows it plus a **Retry step** button that keeps earlier approvals.
+- No more workflow import, credential reattaching or activating.
+  Keys come from `.env`, and http://localhost:8000/health shows which are set.
+- Publish to Sanity is now synchronous and returns a real error message.
+- yt-dlp runs inside the API, so the separate transcript sidecar is gone.
 
-**Social scheduling = Metricool (manual on free tier).** Briefly tried
-self-host Postiz 2026-06-01 and reverted same day — Temporal +
-Elasticsearch + per-platform OAuth dev apps was too much infra. Dashboard
-now has **Copy for Metricool** buttons on every social caption tab that
-one-click-copy the body + hashtags so you paste them into metricool.com to
-schedule. If you ever upgrade to Metricool paid (~$18/mo) we wire the API
-workflow at `workflows/schedule-social.README.md`.
+**⚠️ One-time switch-over on your machine (not yet done):**
+1. `docker compose up -d --build`. This starts `api`, and n8n/Appsmith stop being started.
+2. Run `db/migrate-python-backend.sql`. It re-points gates still waiting on n8n at the API.
+3. Run any `db/migrate-*.sql` you hadn't run yet. Restart postgrest after DDL.
+4. Make sure `.env` has `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`
+   and `SANITY_API_TOKEN`. Before, these lived in n8n credentials; now the
+   API reads them from `.env`.
+5. Open http://localhost:8000/health, then run a test topic end to end.
 
-**Next thing to push through:** finish `publish-cms` setup so a blog
-actually lands on `project-digital-website.vercel.app/blog`. The
-`Upload Cover Image` node's binary-body params + the Sanity credential
-selection are the last remaining knobs.
+**⚠️ Ported from the newest exports in the repo.** Stages 1–4 came from
+`legacy/n8n/exports/Blog Path - Stages 1 & 2 (Brainstorm + Outline).json`,
+which already ran through Stage 4. Anything changed in the n8n UI after
+that export was never committed, so it isn't in the port.
 
-**⚠️ Read this first:** the full n8n workflow (Stages 1–4) still lives
-only inside n8n and is **NOT exported to `workflows/`** — that risk is
-unchanged from last update. Export + commit it before anything happens
-to the container.
+**Feature status (all now served by the API):**
+- **Blog Stages 1–4** (brainstorm → outline → draft → hero image, each with a gate): were working in n8n; ported.
+- **Stage 5 publish to Sanity, Generate meta, Repurpose to social, shortlinks:** dashboard was done; the n8n side had never worked end to end. These now work in the API, untested against the real Sanity.
+- **Inspiration** (`/inspiration`), **Guidelines** (`/guidelines`), **Image Checker**, **Image Maker**, **Video Templates**, **Image Gen**: ported.
+- All of the above are tested with pytest against a real Postgres, with
+  external APIs faked. **None has run against the real APIs since the port.**
 
-**New, unimported, untested (2026-06-30):** `workflows/inspiration-capture.json`
-— Branch 3, a Telegram-bot swipe file. Forward a trending photo/video to a
-bot; Claude (photos) or Gemini (video, analyzed directly — no ffmpeg)
-tags it with a category + summary and stores it in the new
-`inspiration_items` table for the Brainstorm stage to pull from. Needs:
-DB migration (`db/migrate-inspiration.sql`), a Telegram bot token from
-@BotFather, and a public URL/tunnel for the webhook if n8n isn't reachable
-from the internet. Full setup in `workflows/inspiration-capture.README.md`.
+**Social scheduling = Metricool (manual on free tier).** **Copy for
+Metricool** buttons on every caption tab. API scheduling would need
+Metricool paid; the plan is in `legacy/n8n/workflows/schedule-social.README.md`.
 
-**New, unimported, untested (2026-07-22):** `workflows/image-check.json`
-— standalone pre-send QC tool, separate from Image Maker and the Stage-4
-approval gate. Upload any image + paste in what was requested (a client
-brief, a platform spec, a note to self — free text, no client concept in
-the schema), click **Verify** at `/image-checker`; Claude Vision reads the
-image, transcribes any text baked into it, flags grammar/spelling issues
-in that text, and returns a `match` / `partial_match` / `mismatch` verdict
-against the request with a reason. Manual trigger only (not automatic).
-Stored in the new `image_checks` table. Needs: DB migration
-(`db/migrate-image-check.sql`) and the workflow imported + activated (no
-new credential — reuses the existing Anthropic `Header Auth account`).
-Full setup in `workflows/image-check.README.md`.
+### Feature notes worth keeping
 
-**New, unimported, untested (2026-07-13):** `workflows/guidelines-capture.json`
-— Branch 4, a dashboard-upload reference library. Upload a PDF, blog URL, or
-screenshot at `/guidelines`; Claude extracts the text and suggests a
-category + summary, stored in the new `guideline_items` table as
-`pending_review`; confirm/edit the category in the dashboard, which
-triggers OpenAI TTS to narrate the summary and flips the item to
-`published`, viewable at `/guidelines/:id` (text + audio). PPT sources are
-out of scope for v1 — export to PDF first (no PPTX parser exists in
-Claude's API or n8n). Needs: DB migration (`db/migrate-guidelines.sql`) and
-a **new** n8n Header Auth credential for `OPENAI_API_KEY` (no workflow has
-used OpenAI yet — image gen uses Gemini Imagen). Full setup in
-`workflows/guidelines-capture.README.md`.
-
-**New, unimported, untested (2026-10-29):** **Image Gen** at `/image-gen`
-— the "Contact Sheet to Post" tool from `HANDOFF.md`, rebuilt on this
-stack instead of a separate Next.js app. Brand **Projects** (brief +
-reference images) → type an ask → Claude Haiku (vision) drafts a
-generation prompt and checks it against the brief → you edit it → Gemini
-2.5 Flash Image renders it per size (1:1, 4:5, 9:16, 16:9) **with the
-reference images attached** → per-image review (Approve / Changes → auto
-redraft + re-render / BG only / Split) → Download or Save to library at
-the exact pixel size (browser-side crop). Includes History + Spend tabs.
-Two workflows: `workflows/image-gen-draft.json` (sync) and
-`workflows/image-gen-render.json` (async, writes back via PostgREST — no
-worker process). Needs: DB migration (`db/migrate-image-gen.sql`), both
-workflows imported + activated, and the existing Anthropic + Gemini
-credentials reattached (no new credential). Full setup in
-`workflows/image-gen.README.md`.
-
-**Imported and live (2026-08-27):** `workflows/video-template-extract.json`
-— Branch 5, a dashboard page at `/video-templates`. Paste a YouTube URL,
-pick **Tutorial → Flowchart** or **Video → Checklist**. Tries Gemini
-watching the video directly first (`fileData` URL reference, no
-download); if that fails (Gemini's direct-YouTube-URL access has been
-returning intermittent `403 PERMISSION_DENIED` for this project — try a
-fresh API key from a different Google Cloud project if it persists), it
-falls back to a new `transcript-service` sidecar (yt-dlp + Flask, see
-`transcript-service/`) that scrapes the video's captions, then feeds the
-transcript to Claude. Returns either a Mermaid diagram (rendered inline)
-or an ordered checklist (edited inline, downloadable as `.xlsx`/`.pptx`
-via `exceljs`/`pptxgenjs`, with a brand-color picker). No approval gate —
-the rendered/editable result in the dashboard is itself the review step,
-same as the standalone Image Checker tool.
-
-Also tried and abandoned along the way: scraping YouTube's caption-track
-URL directly from n8n with no sidecar — worked for a demo once, then
-YouTube started returning HTTP 200 with a 0-byte body for every caption
-URL tested (confirmed broken independent of this project, even for
-videos with real non-auto captions). yt-dlp is needed specifically
-because it's actively maintained against these YouTube changes; the
-sidecar exists because n8n's official image is now a hardened Alpine
-build with no Python/package manager, so yt-dlp can't run inside the n8n
-container itself.
-
-Setup: DB migration (`db/migrate-video-templates.sql`), `docker compose
-build transcript-service && docker compose up -d transcript-service`,
-`npm install` in `dashboard/` (pulls in `mermaid`, `exceljs`,
-`pptxgenjs`), and the existing Gemini + Anthropic + Postgres n8n
-credentials reattached (no new credential — the sidecar call is
-unauthenticated over the internal Docker network). Full setup in
-`workflows/video-template-extract.README.md`.
+- **Image Gen** (`/image-gen`) is the "Contact Sheet to Post" tool from
+  `HANDOFF.md`. Brand projects (brief + reference images) → ask → Claude
+  Haiku drafts a prompt and checks it against the brief → you edit it →
+  Gemini 2.5 Flash Image renders each size (1:1, 4:5, 9:16, 16:9) with the
+  references attached → per-image review → exact-size crop on download.
+  Migration: `db/migrate-image-gen.sql`.
+- **Video Templates:** Gemini watches the YouTube URL directly first.
+  Direct-URL access has returned intermittent `403 PERMISSION_DENIED` for
+  this project; a key from another Google Cloud project may help. On
+  failure it falls back to yt-dlp captions → Claude. Scraping YouTube's
+  caption URL without yt-dlp was tried and abandoned (0-byte responses).
+- **Guidelines:** PPT isn't supported; export to PDF first. Confirming a
+  guideline narrates its summary with OpenAI TTS (`tts-1`).
+- **Inspiration:** dashboard upload. The Telegram-bot capture in
+  CLAUDE.md was never built.
 
 ---
 
@@ -135,27 +79,28 @@ unauthenticated over the internal Docker network). Full setup in
 
 | Service    | URL                          | Notes                                                       |
 |------------|------------------------------|-------------------------------------------------------------|
-| Dashboard  | http://localhost:3000        | React + Vite + react-router (real URLs: `/`, `/blog`, `/social`, `/images`, `/image-gen`, `/inspiration`, `/guidelines`, `/jobs/:id`, `/guidelines/:id`). |
-| n8n        | http://localhost:5678        | Workflow engine. Each workflow needs to be **Active**.      |
-| PostgREST  | http://localhost:3001        | REST API over Postgres for the dashboard.                   |
-| Postgres   | (internal, 5432)             | DBs: `projectdigital` + `n8n`.                              |
-| Appsmith   | http://localhost (port 80)   | **Legacy** — replaced by the React dashboard. Safe to remove. |
+| Dashboard  | http://localhost:3000        | React + Vite + react-router (`/`, `/blog`, `/social`, `/images`, `/image-gen`, `/image-maker`, `/image-checker`, `/inspiration`, `/guidelines`, `/video-templates`, `/jobs/:id`). |
+| API        | http://localhost:8000        | Python FastAPI (`backend/`). Docs at `/docs`, key check at `/health`, logs via `docker compose logs -f api`. Hot-reloads on save. |
+| PostgREST  | http://localhost:3001        | REST API over Postgres for the dashboard's plain reads/writes. |
+| Postgres   | localhost:5432               | DB `projectdigital` (an old `n8n` DB may still exist; unused). |
 
-External services:
-- **Claude API** (Anthropic) — haiku 4.5 for brainstorm + image prompt + meta gen, sonnet 4.6 for outline + draft + caption gen.
-- **Gemini Imagen** — image gen via `imagen-4.0-generate-001` (`:predict` endpoint). Key in `.env` as `GEMINI_API_KEY`.
-- **Sanity CMS** — project ID `p9audgmp`, dataset `production`. Public site = https://project-digital-website.vercel.app .
-- **Metricool** (SaaS) — current scheduling story is **manual copy/paste** from the dashboard's Copy buttons into metricool.com.
+External services (called only by the API):
+- **Claude API**: Haiku 4.5 for brainstorm, image prompt, meta, slogans, Image Gen draft; Sonnet 4.6 for outline, draft, captions, PDF/blog guidelines, image check, video fallback.
+- **Gemini**: `imagen-4.0-generate-001` (blog hero), `gemini-2.5-flash-image` (Image Maker, Image Gen), `gemini-2.5-flash` (video analysis, inspiration videos).
+- **OpenAI**: `tts-1` for guideline narration.
+- **Sanity CMS**: project `p9audgmp`, dataset `production`. Public site: https://project-digital-website.vercel.app.
+- **TinyURL**: shortlinks (keyless).
+- **Metricool** (SaaS): manual copy/paste from the dashboard.
 
 DB schema (`db/schema.sql`):
 `content_jobs` (incl. `outline` JSONB, `draft_md` TEXT, `chosen_image_id`,
 `blog_url`, `shortlink`), `approval_stages`, `platform_captions` (incl.
 `metricool_post_id`), **`images`** (unified library — AI + uploads),
-**`generated_images`** (legacy — JobDetail / PendingImages still read it,
-see Known issues), **`inspiration_items`** (Branch 3), **`guideline_items`**
-(Branch 4), **`image_checks`** (standalone pre-send image QC, see below),
-**`brand_projects` / `brand_references` / `image_gen_jobs` /
-`image_gen_generations`** (Image Gen, see above).
+**`generated_images`** (legacy; JobDetail / PendingImages / PublishPanel
+still read it. It was never in `schema.sql` until 2026-10-29, when it was
+added to match the live table), **`inspiration_items`**, **`guideline_items`**,
+**`image_checks`**, **`image_maker_projects`**, **`video_templates`**,
+**`brand_projects` / `brand_references` / `image_gen_jobs` / `image_gen_generations`**.
 
 ---
 
@@ -163,52 +108,55 @@ see Known issues), **`inspiration_items`** (Branch 3), **`guideline_items`**
 
 **Phase 1 — Infrastructure** ✅
 
+**Backend switch n8n → Python/FastAPI (2026-10-29)** ✅ (code + tests; real-API smoke test pending)
+- `backend/`: `pipeline.py` (Stages 1–4 + gate mechanism), `routers/blog.py`,
+  `routers/tools.py`, `routers/image_gen.py`, `prompts.py` (live prompts verbatim).
+- 15 pytest tests drive every endpoint against a real Postgres, including
+  the full blog path through all five gates, publish, repurpose and retry.
+- Dashboard: only URLs changed (`n8nPost` → `apiPost`), plus a Retry
+  step button and failure notice on failed jobs.
+
 **Stage 1 — Brainstorm + Approval Gate** ✅
-- n8n: brainstorm → parse → save job → insert approval → wait → update.
+- API: brainstorm → save job → open gate → (approve) → update job.
 - UI: `dashboard/src/components/PendingBrainstorms.tsx`.
 
 **Stage 2 — Outline + Approval Gate** ✅
-- n8n: outline → save → insert approval → wait → advance to `drafting`.
+- API: outline → save → open gate → (approve) → advance to `drafting`.
 - UI: `PendingOutlines.tsx`.
 
 **Stage 3 — Blog Draft + Approval Gate** ✅
-- n8n: draft → save into `draft_md` → insert approval → wait → advance to `image`.
+- API: draft → save into `draft_md` → open gate → (approve) → advance to `image`.
 - UI: `PendingDrafts.tsx`.
 
 **Stage 4 — Image Prompt + Generation + Approval Gate** ✅
-- n8n: image prompt → Imagen → save → insert approval → wait → advance to `cms`.
+- API: image prompt → Imagen → save → open gate → (approve) → advance to `cms`.
 - UI: `PendingImages.tsx`.
 - Verified: a job reached `cms` with a saved image and approved Stage-4 row.
 
-**Stage 5 — Publish to Sanity CMS** 🟡 (dashboard done; n8n mid-import)
+**Stage 5 — Publish to Sanity CMS** 🟡 (built end to end; first real publish pending)
 - UI: `PublishPanel.tsx` — collapsible card on the job page with **all**
   Sanity post fields (title from H1, slug auto-from-title with Generate
   button, author free-text, category dropdown, reading time from word
   count, excerpt prefilled from outline meta description, cover image
   thumbnail + alt, meta title + description with char counters and
   "falls back to..." hints). All AI-generatable fields have **Generate**
-  buttons calling the `generate-meta` n8n webhook.
+  buttons calling `POST /api/generate-meta`.
 - **Pre-publish review modal**: clicking Publish lists any missing
   sections, marks each red (must fix), amber (will be defaulted), or
   gray (Sanity falls back). One click confirms with defaults applied.
-- **n8n workflows ready to import** in `workflows/`: `publish-cms.json`,
-  `generate-meta.json`. Recipe doc at `publish-cms.README.md`.
-- **Not yet confirmed working end-to-end.** Last status: imported, env
-  vars are blocked by default in n8n expressions so URLs were hardcoded;
-  Sanity credential needs to be reconnected per node; `Upload Cover Image`
-  binary-body params depend on the exact n8n version (last error: needs
-  `cover` binary which the prior Code node only emits when an image
-  exists). First successful publish: pending user test on the franchises
-  blog (which has a saved image).
+- `POST /api/publish-cms` uploads the cover, creates author/category if
+  missing, creates the post, and sets `status = published` + `blog_url`.
+  It reads `SANITY_API_TOKEN` from `.env`. The n8n version never completed a
+  publish (binary-body params, blocked env vars); the API version has only
+  run against a faked Sanity so far.
 
-**Repurpose to social** 🟡 (dashboard done; n8n ready to import)
+**Repurpose to social** 🟡 (built end to end; untested against real Claude)
 - UI: `PendingCaptions.tsx` (tabbed per-platform editor with char bars,
   hashtag pills, **Copy for Metricool** button per tab), `Repurpose to social`
   button on the job page, `ui/PlatformIcon.tsx`. Covers LinkedIn / X /
   **Meta** (relabeled from "Instagram" 2026-06-01 — underlying enum value
   unchanged).
-- `repurpose-social.json` ready in `workflows/` with the recipe in
-  `workflows/repurpose-social.README.md`. Not imported / activated yet.
+- `POST /api/repurpose-social` writes captions for the chosen platforms in parallel, then opens gate 5.
 
 **Image Library** 🟡 (UI wired; data still in legacy table)
 - New unified `images` table + `content_jobs.chosen_image_id` column in
@@ -241,7 +189,8 @@ see Known issues), **`inspiration_items`** (Branch 3), **`guideline_items`**
 **Backend / docs cleanup**
 - Postiz → Metricool swap done across CLAUDE.md, STATUS.md (this file),
   README.md, .env.example, docker-compose.yml, schema.sql, types.ts,
-  publish-cms.README.md, repurpose-social.README.md, schedule-social.README.md.
+  publish-cms.README.md, repurpose-social.README.md, schedule-social.README.md
+  (those READMEs are now in `legacy/n8n/workflows/`).
 - DB column renamed via `db/migrate-metricool.sql` (handles both
   `buffer_post_id` and `postiz_post_id` source states).
 
@@ -249,79 +198,69 @@ see Known issues), **`inspiration_items`** (Branch 3), **`guideline_items`**
 
 ## What's NEXT
 
-**1. Land the first successful Sanity publish.** Get the franchises blog
-   (acdada61) all the way from "Ready to publish" → live on
-   `project-digital-website.vercel.app/blog`. Concretely:
-   - Fix `Upload Cover Image` binary-body params (n8n version-specific —
-     pick `n8n Binary File` for Body Content Type and `cover` as
-     Input Data Field Name, see the screenshot guidance in chat).
-   - Confirm the Sanity Header Auth credential is selected on both
-     Sanity HTTP nodes.
-   - Hardcode URLs (`p9audgmp` + `production`) inside the nodes since
-     `$env` access is blocked by default in n8n expressions.
-   - Click Publish, watch the n8n execution, check Sanity Studio.
+**1. Switch-over + smoke test on your machine.** Follow the steps in the
+   TL;DR, then run one topic end to end. Fix whatever the real APIs
+   disagree with.
 
-**2. Import + activate `generate-meta` and `repurpose-social`.** Both
-   JSONs are ready. Activating `generate-meta` unblocks the Excerpt /
-   Alt / Meta-title / Meta-description Generate buttons in the publish
-   panel. Activating `repurpose-social` makes the Repurpose to social
-   button actually work and surfaces captions for review at Stage 5.
+**2. Land the first successful Sanity publish.** Use the franchises blog
+   (acdada61), from "Ready to publish" to live on
+   `project-digital-website.vercel.app/blog`, with `SANITY_API_TOKEN` in `.env`.
+   An error now comes back as a message in the publish panel.
 
-**3. Bitly shortlink.** After publish-cms succeeds, add one HTTP node at
-   the end that calls Bitly's API with the published blog_url, save the
-   result into `content_jobs.shortlink`. ~30 min.
+**3. Bitly (or keep TinyURL).** Shortlinks use keyless TinyURL. Swapping
+   in Bitly is one function (`tinyurl()` in `backend/app/routers/blog.py`)
+   plus `BITLY_ACCESS_TOKEN`.
 
-**4. Finish the image-library refactor.** Update `JobDetail` +
-   `PendingImages` to read from `images` via `chosen_image_id` instead of
-   the legacy `generated_images` embed; update the image-gen node in n8n
-   to write into `images`. Then `generated_images` can be retired.
+**4. Finish the image-library refactor.** Update `JobDetail`,
+   `PendingImages` and `PublishPanel` to read from `images` via
+   `chosen_image_id` instead of the legacy `generated_images` embed, and
+   have `pipeline._render_hero` write to `images`. Then `generated_images`
+   can be retired.
+
+**5. Optional: retire PostgREST.** The dashboard could read through the
+   API instead. That's only worth it if you want auth or business rules
+   on reads; it's not needed today.
 
 **Phase 3 — native social path.** Topic → social-only flow (no blog).
    Out of scope for now.
 
-**Scheduling via Metricool API** — only worth doing if/when you upgrade
-   to Metricool paid. Until then, Copy buttons + manual paste in
-   metricool.com is the scheduling layer.
+**Scheduling via Metricool API**: only if you upgrade to Metricool paid.
 
 ---
 
 ## Known issues / cleanup
 
-- ⚠️ **Full n8n workflow (Stages 1–4) still NOT in repo.** Unchanged from
-  last update: `workflows/` has only `stage1-brainstorm.json` (stale) +
-  `brainstorm-toy.json`. The live workflow runs all the way through image
-  gen but lives only inside the n8n container. **Export from n8n
-  (··· menu → Download) and commit before the container is ever rebuilt.**
-- `generated_images.generated_by` hardcoded to `imagen-3.0-generate-002`
-  even though calls use Imagen 4 — fix the literal.
-- `PendingImages` AI badge label says "Gemini Imagen 3" — cosmetic.
-- **Warm-films job stuck at `image`** — errored before the Imagen-4 fix
-  and never re-run. Archive or Debug-in-editor re-run from the Gemini
-  node.
-- `JobDetail` + `PendingImages` still use legacy `generated_images` — see
-  "Image Library" above.
-- **`db/migrate-images.sql` may not have been run yet.** Once it is, the
-  Image Library page populates from the existing image; until then it
-  shows "No images yet."
+- **Not yet run against real APIs since the port** (see TL;DR).
+- **Fresh-DB init order:** on an empty volume Postgres runs `db/*.sql`
+  alphabetically, so the `migrate-*.sql` files run before `schema.sql`
+  and some fail. Existing DBs are unaffected. Fix by renaming `schema.sql`
+  to sort first, or by moving migrations out of the init folder.
+- `PendingImages` AI badge label says "Gemini Imagen 3"; it's Imagen 4. Cosmetic.
+- **Warm-films job stuck at `image`.** It errored before the Imagen-4 fix.
+  On the API, set its status to `failed` and click **Retry step**, or delete it.
+- `JobDetail` / `PendingImages` / `PublishPanel` still use legacy
+  `generated_images` (see NEXT #4).
+- **`db/migrate-images.sql` may not have been run yet.** Until it is, the
+  Image Library page shows "No images yet."
+- Old n8n data (`n8n_data` volume, `n8n` DB) is unused; delete when you're
+  sure you don't need it.
 
 ---
 
 ## How to run a topic (the golden path)
 
-1. `docker compose up -d`. If `.env` changed, recreate affected
-   container: `docker compose up -d --force-recreate n8n`.
-2. In n8n, make sure each workflow you're using is **Active**.
-3. http://localhost:3000 → **Start a topic** → click Start.
-4. Watch the **Processing** card, then approve at each gate:
-   Brainstorm → Outline → Draft → Image.
-5. Click the job row (or sidebar Recent) → opens `/jobs/<id>`.
-   Stepper + content + Export .docx/.md + **Publish to Sanity CMS** panel.
-6. Expand the publish panel, hit **Generate** on Excerpt / Alt /
-   Meta title / Meta description (needs `generate-meta` active),
-   review, **Publish to Sanity** (needs `publish-cms` active).
-7. Hit **Repurpose to social** (needs `repurpose-social` active) →
-   review captions at Stage 5 → click **Copy for Metricool** per tab →
-   paste into metricool.com → schedule.
+1. `docker compose up -d`. After changing `.env`, run
+   `docker compose up -d --force-recreate api`.
+2. http://localhost:3000 → **Start a topic** → click Start.
+3. Watch the **Processing** card, then approve at each gate:
+   Brainstorm → Outline → Draft → Image. If a step fails, open the job
+   and click **Retry step**.
+4. Open the job (`/jobs/<id>`): Stepper, content, Export .docx/.md,
+   **Publish to Sanity CMS** panel.
+5. In the publish panel, click **Generate** on Excerpt / Alt / Meta title /
+   Meta description, review, then **Publish to Sanity**.
+6. Click **Repurpose to social** → review captions at Stage 5 → **Copy for
+   Metricool** per tab → paste into metricool.com → schedule.
 
 ---
 
@@ -329,9 +268,6 @@ see Known issues), **`inspiration_items`** (Branch 3), **`guideline_items`**
 
 Auto-memory at `C:\Users\SHERWIN\.claude\projects\d--ProjectDigital-WORKFLOW\memory\`:
 
-- **n8n Wait nodes default to GET.** Set `httpMethod: POST` for JSON-body approvals. (`n8n-wait-node-needs-explicit-post`)
-- **Don't use n8n Postgres `executeQuery` + `queryReplacement` for writes.** Use `defineBelow` column mapping. (`n8n-queryreplacement-single-equals`)
-- **After importing a workflow JSON via CLI**, reload the n8n tab (F5), re-activate, restart n8n. (`n8n-workflow-import-method`)
 - **PostgREST schema cache:** after any DDL, restart postgrest or embeds 404. (`postgrest-schema-cache-reload`)
 - **PowerShell ASCII-only scripts** + no `<` stdin redirection. (`powershell-ascii-only-scripts`)
 - **Dashboard = React, not Appsmith.** (`react-dashboard-decision`)
@@ -339,20 +275,19 @@ Auto-memory at `C:\Users\SHERWIN\.claude\projects\d--ProjectDigital-WORKFLOW\mem
 
 New gotchas (not yet in auto-memory — worth formalizing):
 - **Gemini Imagen model name:** use `imagen-4.0-generate-001` (or `-fast-` / `-ultra-`); `imagen-3.0-generate-002` 404s.
-- **n8n only reads `.env` at container (re)create.** `docker compose up -d --force-recreate n8n` after key changes; plain restart may not reload.
+- **The API only reads `.env` at container (re)create.** Run `docker compose up -d --force-recreate api` after changing keys.
 - **PowerShell `$` in a literal key:** PS expands as a variable and mangles the key. Always use `$key="..."; "...?key=$key"`.
-- **n8n env vars (`{{ $env.X }}`) are BLOCKED by default in expressions** for security. Either set `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` or hardcode the value in the node. For three non-secret values (project ID, dataset, public URL), hardcoding is simpler.
 - **Postiz needs Temporal + Elasticsearch in self-host.** Temporal SQL visibility store has a 3-Text-search-attribute limit; ES sidesteps it. RAM + per-platform OAuth setup made it not worth it for MVP — reverted to Metricool 2026-06-01.
 
-Obsolete (Appsmith-era, kept for history):
-- `appsmith-resume-url-host-swap`, `appsmith-json-body-stringified`.
+Obsolete (kept for history):
+- Appsmith era: `appsmith-resume-url-host-swap`, `appsmith-json-body-stringified`.
+- n8n era (2026-10-29): `n8n-wait-node-needs-explicit-post`,
+  `n8n-queryreplacement-single-equals`, `n8n-workflow-import-method`,
+  n8n blocking `$env` in expressions.
 
 ---
 
-## Updating a workflow from repo JSON
+## Changing backend code
 
-```powershell
-docker compose cp ./workflows/<file>.json n8n:/tmp/<file>.json
-docker compose exec -T n8n n8n import:workflow --input=/tmp/<file>.json
-```
-Then reload the n8n tab (F5), re-activate, and restart n8n.
+Edit files under `backend/`. The `api` container hot-reloads on save.
+Run the tests before committing (see `backend/README.md` → Tests).

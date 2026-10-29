@@ -69,16 +69,15 @@ No approval gate; it's a personal swipe file, not published content.
 
 ```
 Trending photo or video found on IG / TikTok / X / YouTube / web
-  → Share / forward → Telegram bot
-    → n8n: Telegram Trigger
+  → Upload via dashboard (/inspiration) — Telegram-bot capture was the original plan, not built
+    → API: POST /api/inspiration-upload
       → Photo: download → Claude Vision tags category + summary
       → Video: download → Gemini analyzes clip directly (no frame extraction/ffmpeg) → tags category + summary
         → Store in `inspiration_items` (category, summary, tags, preview image)
           → Brainstorm stage queries by category for fresh angles
 ```
 
-Workflow: `workflows/inspiration-capture.json` — see
-`workflows/inspiration-capture.README.md` for setup.
+Code: `backend/app/routers/tools.py` (`inspiration_upload`).
 
 ### Branch 4 — Guidelines Capture (reference library, single approval gate)
 
@@ -91,21 +90,20 @@ reference/brand/process documents.
 ```
 Find guideline material (PDF, blog post, or screenshot — export PPT to PDF first)
   → Upload via dashboard (/guidelines)
-    → n8n: guideline-upload webhook
+    → API: POST /api/guideline-upload
       → PDF: Claude reads the PDF natively (document content block)
       → Screenshot: Claude Vision reads the image
       → Blog URL: fetch page → strip HTML → Claude reads the text
         → AI suggests category + 2-3 sentence summary + full extracted text
           → Store in `guideline_items` (status: pending_review)
             → [APPROVAL: confirm or edit the AI-suggested category]
-              → n8n: guideline-confirm webhook
+              → API: POST /api/guideline-confirm
                 → OpenAI TTS narrates the summary
                   → Store audio, status: published
                     → Guideline page at /guidelines/:id (text + audio narration)
 ```
 
-Workflow: `workflows/guidelines-capture.json` — see
-`workflows/guidelines-capture.README.md` for setup.
+Code: `backend/app/routers/tools.py` (`guideline_upload`, `guideline_confirm`).
 
 ---
 
@@ -128,18 +126,18 @@ Every approval stage must pause the workflow and surface content in the React da
 
 | Layer | Tool | Why |
 |---|---|---|
-| Workflow orchestration | **n8n** (self-hosted via Docker) | Open source, visual canvas, webhook-based approval pausing, free |
+| Backend / orchestration | **Python + FastAPI** (`backend/`, self-hosted via Docker) | Replaced n8n 2026-10-29. Every workflow was really Code nodes + raw HTTP calls, so n8n's canvas added export/import/credential overhead without much benefit (workflows lived outside git, env vars blocked in expressions, a Python sidecar just for yt-dlp). Approval gates are DB rows whose `resume_url` points at the API — no paused executions. See `backend/README.md`. |
 | Approval dashboard | **React + Vite + Tailwind** (`dashboard/`, self-hosted via Docker) | Hand-rolled; replaced Appsmith 2026-05-26. Low-code archaeology made iteration too painful — see auto-memory `react-dashboard-decision`. |
-| Database REST API | **PostgREST** (self-hosted via Docker) | Auto-generates a REST API over Postgres. The React dashboard reads/writes through this; no hand-rolled backend. |
+| Database REST API | **PostgREST** (self-hosted via Docker) | Auto-generates a REST API over Postgres. The React dashboard reads/writes plain table data through this; anything that calls a model or external service goes through the FastAPI backend. |
 | AI content generation | **Claude API** (Anthropic) | Blog drafts, outlines, brainstorming, per-platform caption rewrites |
-| Image generation | **OpenAI DALL-E 3** or **Google Gemini Imagen** | Called from Appsmith dashboard; user can regenerate |
+| Image generation | **Google Gemini Imagen 4** (blog hero) + **Gemini 2.5 Flash Image** (Image Maker, Image Gen) | Called from the backend; user approves or regenerates |
 | Database | **PostgreSQL** (via Docker) or **Supabase** (cloud free tier) | Stores drafts, approval status, image URLs, platform captions |
 | File storage | **Cloudflare R2** or **AWS S3** | Stores generated images and video files |
 | URL shortening | **Bitly API** | Free tier covers basic usage |
-| Social scheduling | **Metricool** (SaaS) | Free tier covers Facebook, Instagram, Threads, TikTok, YouTube, Pinterest — dashboard generates captions, you copy them into Metricool's UI. Paid plans ($18/mo+) unlock REST API access so n8n can schedule directly. Switched back from Postiz 2026-06-01 — self-host scheduler was too much infrastructure (Temporal + Elasticsearch + per-platform OAuth dev apps) for MVP-stage scheduling needs. |
+| Social scheduling | **Metricool** (SaaS) | Free tier covers Facebook, Instagram, Threads, TikTok, YouTube, Pinterest — dashboard generates captions, you copy them into Metricool's UI. Paid plans ($18/mo+) unlock REST API access so the backend can schedule directly. Switched back from Postiz 2026-06-01 — self-host scheduler was too much infrastructure (Temporal + Elasticsearch + per-platform OAuth dev apps) for MVP-stage scheduling needs. |
 | Inspiration capture | **Telegram Bot API** | Zero-friction mobile capture — most social apps support native "Share → Telegram." Single bot/webhook ingests both photos and videos for Branch 3 (see above), avoiding fragile per-platform scrapers. |
 | Guideline narration | **OpenAI TTS** (`tts-1`) | Narrates the AI-generated summary of each confirmed guideline for Branch 4 (see above). Reuses the existing `OPENAI_API_KEY` — no new key needed. |
-| Containerisation | **Docker Desktop** | Runs n8n + Appsmith + Postgres locally with one command |
+| Containerisation | **Docker Desktop** | Runs Postgres + API + PostgREST + dashboard locally with one command (`docker compose up -d`) |
 | Version control | **Git + GitHub** | Track workflow configs and dashboard code |
 
 ---
@@ -153,20 +151,22 @@ ProjectDigital/
 ├── .env                       ← real keys — never commit this
 ├── .env.example               ← template with comments — commit this
 ├── .gitignore
-├── docker-compose.yml         ← spins up n8n + Appsmith + Postgres
+├── docker-compose.yml         ← spins up Postgres + API + PostgREST + dashboard
 │
 ├── docs/
 │   ├── workflow-blog-path.png
 │   ├── workflow-social-path.png
 │   └── tech-stack.md
 │
-├── workflows/                 ← n8n workflow JSON exports
-│   ├── blog-path.json
-│   └── social-path.json
+├── backend/                   ← Python (FastAPI) API — AI steps, approval gates, integrations
+│   ├── app/                   ← main.py, pipeline.py, prompts.py, routers/
+│   └── tests/                 ← pytest (real Postgres, faked external APIs)
 │
-├── dashboard/                 ← Appsmith pages / custom dashboard code
-│   ├── approval-stages/
-│   └── image-gen/
+├── dashboard/                 ← React + Vite approval dashboard
+│
+├── db/                        ← schema.sql + one-off migrate-*.sql
+│
+├── legacy/n8n/                ← archived n8n workflows (no longer run)
 │
 ├── scripts/                   ← utility scripts (e.g. resize images, test APIs)
 │   └── test-apis.sh
@@ -191,17 +191,17 @@ ProjectDigital/
 Build the Blog Path first — it's linear, easier to test end-to-end, and proves the approval loop works before adding the complexity of multi-platform social routing.
 
 **Phase 1 — Infrastructure**
-- [ ] Docker Compose up (n8n + Appsmith + Postgres)
+- [ ] Docker Compose up (Postgres + API + PostgREST + dashboard)
 - [ ] Environment variables configured
 - [ ] APIs tested (Claude, OpenAI, Bitly)
 
 **Phase 2 — Blog Path**
-- [ ] n8n workflow: Topic → Brainstorm → Outline → Draft → Image → CMS → Publish → Bitly
-- [ ] Appsmith approval pages for each stage
+- [ ] Backend pipeline: Topic → Brainstorm → Outline → Draft → Image → CMS → Publish → Shortlink
+- [ ] Dashboard approval pages for each stage
 - [ ] Postgres schema: `content_jobs`, `approval_stages`, `platform_captions`
 
 **Phase 3 — Social Path**
-- [ ] n8n workflow: Type routing (Meme/Static/Carousel/Reel)
+- [ ] Backend: Type routing (Meme/Static/Carousel/Reel)
 - [ ] Platform routing (LinkedIn/Pinterest/Instagram/Facebook/TikTok/YouTube/X/Threads)
 - [ ] Caption generation prompts per platform
 - [ ] Metricool integration for scheduling (manual paste on free; API workflow on paid)
@@ -231,8 +231,8 @@ See `.env.example` for full list. Key ones:
 - **Read `STATUS.md` at the start of every session.** It tracks current progress, what's working, and what to build next. Keep it updated as work lands.
 - **Always follow the build order above.** Don't jump ahead to social path until blog path is tested.
 - **Never publish content without an approval gate.** Every workflow must pause at each approval stage.
-- **Prompt templates live in `/prompts/`.** When writing Claude API calls, reference these files rather than hardcoding prompts inline.
-- **n8n workflows are exported as JSON to `/workflows/`.** After any change to a workflow in the n8n UI, export and commit the JSON.
+- **Prompts:** `/prompts/*.md` hold the prompt templates; the backend can load them with `prompts.load_section()` (Image Gen does). The blog/social/tool system prompts that were live in n8n were ported verbatim into `backend/app/prompts.py` — keep new system prompts in one of those two places rather than scattered through route code.
+- **All backend logic is Python in `backend/`.** Add a feature as a route in `backend/app/routers/`, with a test in `backend/tests/` (real Postgres, external APIs faked). Run `pytest` before committing. Approval gates go through `pipeline.open_gate()` — never advance a job without one.
 - **Never commit `.env`.** Only `.env.example` gets committed.
 - **Content types and aspect ratios:**
   - Meme, Static Post, Carousel → 4:5
@@ -247,6 +247,6 @@ See `.env.example` for full list. Key ones:
 
 - Workflow was designed from two hand-drawn diagrams, then a digital diagram
 - Originally chose Appsmith over Retool for free + open-source. Switched to a React dashboard 2026-05-26 — Appsmith's low-code model required too much archaeology per new feature, and that was already biting at Stage 2.
-- Chose n8n over Make because n8n is open-source, self-hostable, and has direct Claude API integration via HTTP nodes
-- Use n8n + React + PostgREST as the backbone; build custom only where needed
+- Chose n8n over Make because n8n is open-source, self-hostable, and has direct Claude API integration via HTTP nodes. Switched n8n → Python/FastAPI 2026-10-29: the workflows had become Code nodes + raw HTTP calls, and the n8n overhead (manual JSON export, credential reattaching, blocked env vars, a Python sidecar for yt-dlp) outweighed the visual canvas. Old workflows in `legacy/n8n/`.
+- Backbone now: FastAPI backend + React dashboard + PostgREST + Postgres
 - Human approval at every major stage is a hard requirement, not optional

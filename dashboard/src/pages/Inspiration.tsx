@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { pgDelete, pgGet } from '../lib/api'
+import { API_INSPIRATION_UPLOAD_URL, pgDelete, pgGet } from '../lib/api'
 import type { InspirationCategory, InspirationItem, InspirationType } from '../lib/types'
 import { PageHeader } from '../components/ui/PageHeader'
 import { I } from '../components/ui/Icon'
@@ -25,7 +25,6 @@ const CATEGORY_ORDER: InspirationCategory[] = [
   'tv_shows', 'streaming', 'gadgets', 'tools', 'games', 'movies', 'ai', 'anime', 'esports', 'other',
 ]
 
-const N8N_WEBHOOK = 'http://localhost:5678/webhook/inspiration-upload'
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const MAX_VIDEO_BYTES = 20 * 1024 * 1024
 
@@ -129,7 +128,7 @@ export default function Inspiration() {
         preview_b64 = await extractVideoFrame(file)
         if (preview_b64) preview_mime_type = 'image/jpeg'
       }
-      const res = await fetch(N8N_WEBHOOK, {
+      const res = await fetch(API_INSPIRATION_UPLOAD_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -141,7 +140,7 @@ export default function Inspiration() {
           preview_mime_type,
         }),
       })
-      if (!res.ok) throw new Error(`n8n responded ${res.status} — is the workflow active?`)
+      if (!res.ok) throw new Error(`API responded ${res.status}: ${await res.text().catch(() => '')}`)
       const result = await res.json()
       setUploadResult(result)
       pickFile(null)

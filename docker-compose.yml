@@ -24,50 +24,38 @@ services:
       retries: 5
 
   # ─────────────────────────────────────────
-  # n8n — workflow orchestration
-  # Access at http://localhost:5678
+  # API — Python (FastAPI) backend: every AI step, approval gate and
+  # external integration (replaced n8n 2026-10-29). See backend/README.md.
+  # Access at http://localhost:8000 (interactive docs at /docs)
+  # Reads API keys from .env. Code + prompts are mounted, and --reload
+  # picks up edits without a rebuild.
   # ─────────────────────────────────────────
-  n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
-    container_name: projectdigital_n8n
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: projectdigital_api
     restart: unless-stopped
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports:
-      - "5678:5678"
+      - "127.0.0.1:8000:8000"
     environment:
-      - DB_TYPE=postgresdb
-      - DB_POSTGRESDB_HOST=postgres
-      - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_DATABASE=${N8N_DB:-n8n}
-      - DB_POSTGRESDB_USER=${POSTGRES_USER:-projectdigital}
-      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-projectdigital}
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=Asia/Singapore
+      DATABASE_URL: postgresql://${POSTGRES_USER:-projectdigital}:${POSTGRES_PASSWORD:-projectdigital}@postgres:5432/${POSTGRES_DB:-projectdigital}
+      PUBLIC_API_URL: http://localhost:8000
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SANITY_PROJECT_ID: ${SANITY_PROJECT_ID:-p9audgmp}
+      SANITY_DATASET: ${SANITY_DATASET:-production}
+      SANITY_API_TOKEN: ${SANITY_API_TOKEN:-}
+      SITE_URL: ${SITE_URL:-https://project-digital-website.vercel.app}
     volumes:
-      - n8n_data:/home/node/.n8n
-      - ./workflows:/home/node/.n8n/workflows
+      - ./backend:/srv/backend
+      - ./prompts:/srv/prompts:ro
     depends_on:
       postgres:
         condition: service_healthy
-
-  # ─────────────────────────────────────────
-  # Appsmith — legacy approval dashboard (being replaced by React app)
-  # Kept running so we can compare side-by-side during the transition.
-  # Remove this block once the React dashboard reaches feature parity.
-  # ─────────────────────────────────────────
-  appsmith:
-    image: index.docker.io/appsmith/appsmith-ce:latest
-    container_name: projectdigital_appsmith
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - appsmith_data:/appsmith-stacks
-    depends_on:
-      - postgres
 
   # ─────────────────────────────────────────
   # PostgREST — auto-generates a REST API over Postgres
@@ -113,33 +101,14 @@ services:
     environment:
       - CHOKIDAR_USEPOLLING=true
       - VITE_POSTGREST_URL=http://localhost:3001
-      - VITE_N8N_BASE_URL=http://localhost:5678
+      - VITE_API_URL=http://localhost:8000
     depends_on:
       - postgrest
+      - api
 
   # Social scheduling: Metricool — managed SaaS, no Docker service needed.
-  # n8n calls Metricool's REST API directly (paid plans only — free tier =
-  # copy/paste captions from the dashboard into Metricool's UI manually).
-
-  # ─────────────────────────────────────────
-  # Transcript Service — yt-dlp sidecar for Branch 5 (Video Templates)
-  # n8n's official image is a hardened Alpine build with no apk/python3, so
-  # yt-dlp can't run inside the n8n container itself. This tiny Python
-  # service exposes GET /transcript?url=<youtube_url> over the internal
-  # compose network; n8n calls it like any other HTTP API. Used as a
-  # fallback when Gemini's direct video-URL analysis fails — see
-  # workflows/video-template-extract.README.md.
-  # ─────────────────────────────────────────
-  transcript-service:
-    build:
-      context: ./transcript-service
-    container_name: projectdigital_transcript_service
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8811:8811"
+  # Free tier = copy/paste captions from the dashboard into Metricool's UI.
 
 volumes:
   postgres_data:
-  n8n_data:
-  appsmith_data:
   dashboard_node_modules:

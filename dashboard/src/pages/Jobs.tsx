@@ -44,7 +44,7 @@ export default function Jobs({ branchOnly }: { branchOnly?: 'blog' | 'social' } 
     e.stopPropagation()
     const ok = window.confirm(
       `Delete "${job.topic}"?\n\nThis permanently removes the job and all its approvals, generated images, and captions. ` +
-      `If the job is mid-workflow in n8n, the n8n execution will fail in the background — clean it up via n8n's Executions panel if needed.`,
+      `If an AI step is running for it right now, that step will fail quietly in the background.`,
     )
     if (ok) deleteMutation.mutate(job.id)
   }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { n8nPost, pgGet } from '../lib/api'
+import { apiPost, pgGet } from '../lib/api'
 import type { ApprovalStage, ContentJob } from '../lib/types'
 import { AIBadge } from './ui/Badges'
 import { I } from './ui/Icon'
@@ -66,7 +66,7 @@ export function DraftCard({ approval }: { approval: PendingDraft }) {
   const mutation = useMutation({
     mutationFn: async () => {
       if (!approval.resume_url) throw new Error('No resume_url on approval row')
-      return n8nPost(approval.resume_url, {
+      return apiPost(approval.resume_url, {
         draft_notes: notes.trim(),
       })
     },

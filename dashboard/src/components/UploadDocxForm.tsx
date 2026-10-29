@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import mammoth from 'mammoth'
-import { N8N_UPLOAD_BLOG_URL, n8nPost } from '../lib/api'
+import { API_UPLOAD_BLOG_URL, apiPost } from '../lib/api'
 import { I } from './ui/Icon'
 
 function htmlToMarkdown(html: string): string {
@@ -54,7 +54,7 @@ export default function UploadDocxForm() {
   const queryClient = useQueryClient()
 
   const mutation = useMutation({
-    mutationFn: () => n8nPost(N8N_UPLOAD_BLOG_URL, { topic: topic.trim(), draft_md: draftMd }),
+    mutationFn: () => apiPost(API_UPLOAD_BLOG_URL, { topic: topic.trim(), draft_md: draftMd }),
     onSuccess: () => {
       setStep('done')
       queryClient.invalidateQueries({ queryKey: ['jobs'] })

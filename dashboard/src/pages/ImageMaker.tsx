@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { N8N_IMAGE_MAKER_URL, n8nPost, pgDelete, pgGet, pgPatch, pgPost } from '../lib/api'
+import { API_IMAGE_MAKER_URL, apiPost, pgDelete, pgGet, pgPatch, pgPost } from '../lib/api'
 import type { ImageMakerProject, ImageMakerStatus } from '../lib/types'
 import { PageHeader } from '../components/ui/PageHeader'
 import { I } from '../components/ui/Icon'
@@ -34,7 +34,7 @@ function fileToBase64(file: File): Promise<{ b64: string; mime: string }> {
 
 async function runGeneration(project: ImageMakerProject) {
   try {
-    const data = await n8nPost(N8N_IMAGE_MAKER_URL, {
+    const data = await apiPost(API_IMAGE_MAKER_URL, {
       instruction: project.instruction,
       reference_image_b64: project.reference_image_b64,
       reference_mime_type: project.reference_mime_type,

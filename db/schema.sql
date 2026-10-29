@@ -78,9 +78,9 @@ CREATE INDEX IF NOT EXISTS idx_content_jobs_status ON content_jobs (status);
 CREATE INDEX IF NOT EXISTS idx_content_jobs_branch ON content_jobs (branch);
 
 -- ── approval_stages ────────────────────────────────────────
--- Audit trail of every gate. n8n inserts a 'pending' row and
--- pauses; the Appsmith dashboard flips it to approved/edited;
--- a webhook resumes the workflow. Never auto-advance.
+-- Audit trail of every gate. The API inserts a 'pending' row; the
+-- dashboard shows it and POSTs the reviewer's input to resume_url,
+-- which closes the gate and runs the next step. Never auto-advance.
 CREATE TABLE IF NOT EXISTS approval_stages (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_id         UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS approval_stages (
   edited_content JSONB,                                -- human edits, if any
   status         approval_status NOT NULL DEFAULT 'pending',
   feedback       TEXT,
-  resume_url     TEXT,                                 -- n8n webhook to resume this gate
+  resume_url     TEXT,                                 -- API URL that closes this gate + runs the next step
   reviewed_by    TEXT,
   reviewed_at    TIMESTAMPTZ,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -100,6 +100,24 @@ CREATE TABLE IF NOT EXISTS approval_stages (
 
 CREATE INDEX IF NOT EXISTS idx_approval_stages_job    ON approval_stages (job_id);
 CREATE INDEX IF NOT EXISTS idx_approval_stages_status ON approval_stages (status);
+
+-- ── generated_images (legacy) ──────────────────────────────
+-- Blog Stage-4 hero images. Superseded by `images` + content_jobs.chosen_image_id
+-- but still written by the API and read by JobDetail / PendingImages /
+-- PublishPanel until that refactor lands (see STATUS.md). Originally created
+-- by hand in the live DB; defined here so fresh databases match.
+CREATE TABLE IF NOT EXISTS generated_images (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id        UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,
+  prompt        TEXT,
+  image_b64     TEXT NOT NULL,
+  mime_type     TEXT NOT NULL DEFAULT 'image/png',
+  is_chosen     BOOLEAN NOT NULL DEFAULT false,
+  generated_by  TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_generated_images_job ON generated_images (job_id);
 
 -- ── images ─────────────────────────────────────────────────
 -- Unified image library. Both AI-generated images (Stage 4) and
@@ -377,7 +395,7 @@ CREATE INDEX IF NOT EXISTS idx_image_gen_jobs_brand      ON image_gen_jobs (bran
 CREATE INDEX IF NOT EXISTS idx_image_gen_jobs_status     ON image_gen_jobs (status);
 CREATE INDEX IF NOT EXISTS idx_image_gen_jobs_created_at ON image_gen_jobs (created_at DESC);
 
--- One row per (job, size). The render workflow fills image_b64; the
+-- One row per (job, size). The API render step fills image_b64; the
 -- dashboard records the human review decision.
 CREATE TABLE IF NOT EXISTS image_gen_generations (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -235,3 +235,66 @@ export interface VideoTemplate {
   created_at: string
   updated_at: string
 }
+
+// ── Image Gen (brand projects -> drafted prompt -> per-size render -> review)
+export type ImageGenSize = 'post' | 'portrait' | 'story' | 'banner'
+export type ImageGenJobStatus = 'queued' | 'running' | 'done' | 'failed'
+export type ImageGenRenderStatus = 'rendering' | 'done' | 'failed'
+export type ImageGenReviewStatus = 'pending' | 'approved' | 'changes' | 'bg_only' | 'split'
+
+export interface BriefCheck {
+  passes: boolean
+  issues: string[]
+  notes: string
+}
+
+export interface BrandProject {
+  id: string
+  name: string
+  brief: string
+  created_at: string
+  updated_at: string
+}
+
+export interface BrandReference {
+  id: string
+  brand_id: string
+  label: string | null
+  image_b64: string
+  mime_type: string
+  created_at: string
+}
+
+export interface ImageGenGeneration {
+  id: string
+  job_id: string
+  size: ImageGenSize
+  render_status: ImageGenRenderStatus
+  image_b64: string | null
+  mime_type: string | null
+  generated_by: string | null
+  error: string | null
+  review_status: ImageGenReviewStatus
+  review_notes: string | null
+  reviewed_at: string | null
+  library_image_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ImageGenJob {
+  id: string
+  brand_id: string
+  prompt_raw: string
+  prompt_drafted: string
+  brief_check: BriefCheck | null
+  sizes: ImageGenSize[]
+  reference_ids: string[]
+  parent_job_id: string | null
+  change_note: string | null
+  status: ImageGenJobStatus
+  error: string | null
+  created_at: string
+  updated_at: string
+  image_gen_generations?: ImageGenGeneration[]
+}

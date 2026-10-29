@@ -15,6 +15,8 @@ export const N8N_IMAGE_CHECK_URL = `${N8N_BASE_URL}/webhook/image-check`
 export const N8N_GUIDELINE_UPLOAD_URL = `${N8N_BASE_URL}/webhook/guideline-upload`
 export const N8N_GUIDELINE_CONFIRM_URL = `${N8N_BASE_URL}/webhook/guideline-confirm`
 export const N8N_VIDEO_TEMPLATE_URL = `${N8N_BASE_URL}/webhook/video-template-extract`
+export const N8N_IMAGE_GEN_DRAFT_URL = `${N8N_BASE_URL}/webhook/image-gen-draft`
+export const N8N_IMAGE_GEN_RENDER_URL = `${N8N_BASE_URL}/webhook/image-gen-render`
 
 export async function shortenUrl(longUrl: string): Promise<string> {
   const res = await fetch(`${N8N_SHORTEN_URL}?url=${encodeURIComponent(longUrl)}`)

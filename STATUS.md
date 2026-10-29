@@ -4,7 +4,7 @@
 > built, what works, and what to build next. `CLAUDE.md` is the stable project
 > definition; this file is the moving target. Update it as things change.
 
-_Last updated: 2026-08-23_
+_Last updated: 2026-10-29_
 
 ---
 
@@ -78,6 +78,22 @@ a **new** n8n Header Auth credential for `OPENAI_API_KEY` (no workflow has
 used OpenAI yet — image gen uses Gemini Imagen). Full setup in
 `workflows/guidelines-capture.README.md`.
 
+**New, unimported, untested (2026-10-29):** **Image Gen** at `/image-gen`
+— the "Contact Sheet to Post" tool from `HANDOFF.md`, rebuilt on this
+stack instead of a separate Next.js app. Brand **Projects** (brief +
+reference images) → type an ask → Claude Haiku (vision) drafts a
+generation prompt and checks it against the brief → you edit it → Gemini
+2.5 Flash Image renders it per size (1:1, 4:5, 9:16, 16:9) **with the
+reference images attached** → per-image review (Approve / Changes → auto
+redraft + re-render / BG only / Split) → Download or Save to library at
+the exact pixel size (browser-side crop). Includes History + Spend tabs.
+Two workflows: `workflows/image-gen-draft.json` (sync) and
+`workflows/image-gen-render.json` (async, writes back via PostgREST — no
+worker process). Needs: DB migration (`db/migrate-image-gen.sql`), both
+workflows imported + activated, and the existing Anthropic + Gemini
+credentials reattached (no new credential). Full setup in
+`workflows/image-gen.README.md`.
+
 **Imported and live (2026-08-27):** `workflows/video-template-extract.json`
 — Branch 5, a dashboard page at `/video-templates`. Paste a YouTube URL,
 pick **Tutorial → Flowchart** or **Video → Checklist**. Tries Gemini
@@ -119,7 +135,7 @@ unauthenticated over the internal Docker network). Full setup in
 
 | Service    | URL                          | Notes                                                       |
 |------------|------------------------------|-------------------------------------------------------------|
-| Dashboard  | http://localhost:3000        | React + Vite + react-router (real URLs: `/`, `/blog`, `/social`, `/images`, `/inspiration`, `/guidelines`, `/jobs/:id`, `/guidelines/:id`). |
+| Dashboard  | http://localhost:3000        | React + Vite + react-router (real URLs: `/`, `/blog`, `/social`, `/images`, `/image-gen`, `/inspiration`, `/guidelines`, `/jobs/:id`, `/guidelines/:id`). |
 | n8n        | http://localhost:5678        | Workflow engine. Each workflow needs to be **Active**.      |
 | PostgREST  | http://localhost:3001        | REST API over Postgres for the dashboard.                   |
 | Postgres   | (internal, 5432)             | DBs: `projectdigital` + `n8n`.                              |
@@ -137,7 +153,9 @@ DB schema (`db/schema.sql`):
 `metricool_post_id`), **`images`** (unified library — AI + uploads),
 **`generated_images`** (legacy — JobDetail / PendingImages still read it,
 see Known issues), **`inspiration_items`** (Branch 3), **`guideline_items`**
-(Branch 4), **`image_checks`** (standalone pre-send image QC, see below).
+(Branch 4), **`image_checks`** (standalone pre-send image QC, see below),
+**`brand_projects` / `brand_references` / `image_gen_jobs` /
+`image_gen_generations`** (Image Gen, see above).
 
 ---
 

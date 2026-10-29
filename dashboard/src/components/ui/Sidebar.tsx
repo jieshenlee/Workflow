@@ -5,7 +5,7 @@ import type { ContentJob } from '../../lib/types'
 import { I } from './Icon'
 import { useJobNav } from './JobNav'
 
-export type NavKey = 'dashboard' | 'blog' | 'social' | 'images' | 'image-maker' | 'image-checker' | 'inspiration' | 'guidelines' | 'video-templates' | 'settings'
+export type NavKey = 'dashboard' | 'blog' | 'social' | 'images' | 'image-gen' | 'image-maker' | 'image-checker' | 'inspiration' | 'guidelines' | 'video-templates' | 'settings'
 
 interface Props {
   current: NavKey
@@ -37,6 +37,7 @@ export function Sidebar({ current, onNav }: Props) {
     { id: 'blog', label: 'Blog Jobs', icon: I.blog, count: blogPending },
     { id: 'social', label: 'Social Jobs', icon: I.social, count: socialPending },
     { id: 'images', label: 'Image Library', icon: I.image },
+    { id: 'image-gen', label: 'Image Gen', icon: I.sparkle },
     { id: 'image-maker', label: 'Image Maker', icon: I.wand },
     { id: 'image-checker', label: 'Image Checker', icon: I.search },
     { id: 'inspiration', label: 'Inspiration', icon: I.lightbulb },

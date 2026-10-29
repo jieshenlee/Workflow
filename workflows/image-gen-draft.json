@@ -1,0 +1,125 @@
+{
+  "id": "imagegendraft",
+  "name": "Image Gen - Draft (ask + brand refs -> prompt + brief check)",
+  "nodes": [
+    {
+      "id": "imggen-1",
+      "name": "Image Gen Draft (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "image-gen-draft",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "image-gen-draft"
+    },
+    {
+      "id": "imggen-2",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Prompt source of truth: prompts/image-gen-draft.md — keep in sync.\nconst input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\nbody = body || {};\nconst ask = (body.ask || '').toString().trim();\nif (!ask) throw new Error('ask is required');\nconst brand_name = (body.brand_name || 'Untitled brand').toString();\nconst brief = (body.brief || '').toString().trim();\nconst sizes = Array.isArray(body.sizes) ? body.sizes : [];\nconst references = (Array.isArray(body.references) ? body.references : [])\n  .filter(r => r && r.b64)\n  .slice(0, 6);\nconst previous_prompt = (body.previous_prompt || '').toString().trim();\nconst change_note = (body.change_note || '').toString().trim();\n\nconst system = \"You are an art director writing prompts for an image-generation model\\n(Gemini 2.5 Flash Image). The model will receive your prompt **plus the\\nsame reference images you are looking at**, so it can see the brand's\\nvisual style directly.\\n\\nYour job:\\n1. Study the reference images: palette, lighting, photographic vs.\\n   illustrated style, composition, typography treatment, mood.\\n2. Write ONE generation prompt that fulfils the ask in that brand style.\\n   Be concrete: subject, setting, composition, camera/angle, lighting,\\n   palette (name the actual colours), mood, and any on-image text in\\n   double quotes. 60\\u2013160 words. No aspect ratio or pixel sizes \\u2014 those\\n   are added per size at render time.\\n3. Check the prompt against the brand brief. List every rule it breaks or\\n   risks breaking (wrong colours, forbidden imagery, tone, logo misuse,\\n   missing required elements). If the brief is empty, say so as an issue.\\n\\nReturn ONLY valid JSON, no markdown fences or commentary:\\n\\n```json\\n{\\n  \\\"prompt\\\": \\\"the generation prompt\\\",\\n  \\\"brief_check\\\": {\\n    \\\"passes\\\": true,\\n    \\\"issues\\\": [\\\"each rule broken or at risk, empty if none\\\"],\\n    \\\"notes\\\": \\\"one sentence on how the prompt follows the brief\\\"\\n  }\\n}\\n```\";\n\nlet text = 'Brand: ' + brand_name + '\\n\\nBrand brief:\\n' + (brief || '(no brief written yet)') +\n  '\\n\\nAsk: ' + ask + '\\n\\nOutput sizes: ' + (sizes.join(', ') || 'post');\nif (previous_prompt && change_note) {\n  text += '\\n\\nPrevious prompt:\\n' + previous_prompt +\n    '\\n\\nReviewer\\'s requested changes:\\n' + change_note +\n    '\\nRewrite the previous prompt to apply these changes. Keep everything the reviewer did not ask to change.';\n}\nif (!references.length) text += '\\n\\n(No reference images were selected — infer the style from the brief alone.)';\n\nconst content = references.map(r => ({\n  type: 'image',\n  source: { type: 'base64', media_type: r.mime || 'image/png', data: r.b64 },\n}));\ncontent.push({ type: 'text', text });\n\nconst claude_body = {\n  model: 'claude-haiku-4-5-20251001',\n  max_tokens: 1200,\n  system: [{ type: 'text', text: system }],\n  messages: [{ role: 'user', content }],\n};\nreturn [{ json: { claude_body } }];"
+      }
+    },
+    {
+      "id": "imggen-3",
+      "name": "Claude Draft Prompt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.claude_body) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "h9HojADDLPyDuAp8",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "id": "imggen-4",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst raw = (res.content && res.content[0] && res.content[0].text) ? res.content[0].text : '';\nif (!raw) throw new Error('Claude returned no text: ' + JSON.stringify(res.error || res).slice(0, 300));\nlet txt = raw.trim();\nif (txt.startsWith('```')) { txt = txt.substring(txt.indexOf('\\n') + 1); if (txt.endsWith('```')) txt = txt.slice(0, -3); txt = txt.trim(); }\nconst start = txt.indexOf('{'); const end = txt.lastIndexOf('}');\nif (start >= 0 && end > start) txt = txt.slice(start, end + 1);\nlet d = {};\ntry { d = JSON.parse(txt); } catch (e) { d = { prompt: raw.trim(), brief_check: { passes: false, issues: ['Claude reply was not valid JSON — brief check skipped, review the prompt by eye.'], notes: '' } }; }\nconst bc = d.brief_check || {};\nconst brief_check = {\n  passes: bc.passes === true,\n  issues: Array.isArray(bc.issues) ? bc.issues.map(String) : [],\n  notes: (bc.notes || '').toString(),\n};\nif (brief_check.issues.length) brief_check.passes = false;\nreturn [{ json: { ok: true, prompt: (d.prompt || '').toString().trim(), brief_check } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Image Gen Draft (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "Claude Draft Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Draft Prompt": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

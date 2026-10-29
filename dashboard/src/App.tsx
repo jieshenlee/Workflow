@@ -10,6 +10,7 @@ import PendingCaptions from './components/PendingCaptions'
 import ProcessingJobs from './components/ProcessingJobs'
 import ImageLibrary from './pages/ImageLibrary'
 import ImageMaker from './pages/ImageMaker'
+import ImageGen from './pages/ImageGen'
 import ImageChecker from './pages/ImageChecker'
 import Inspiration from './pages/Inspiration'
 import Guidelines from './pages/Guidelines'
@@ -99,6 +100,7 @@ const PATH_TO_NAV: Record<string, NavKey> = {
   '/blog': 'blog',
   '/social': 'social',
   '/images': 'images',
+  '/image-gen': 'image-gen',
   '/image-maker': 'image-maker',
   '/image-checker': 'image-checker',
   '/inspiration': 'inspiration',
@@ -111,6 +113,7 @@ const NAV_TO_PATH: Record<NavKey, string> = {
   blog: '/blog',
   social: '/social',
   images: '/images',
+  'image-gen': '/image-gen',
   'image-maker': '/image-maker',
   'image-checker': '/image-checker',
   inspiration: '/inspiration',
@@ -166,6 +169,7 @@ function AppShell() {
             <Route path="/blog" element={<BlogJobsPage />} />
             <Route path="/social" element={<SocialJobsPage />} />
             <Route path="/images" element={<ImageLibrary />} />
+            <Route path="/image-gen" element={<ImageGen />} />
             <Route path="/image-maker" element={<ImageMaker />} />
             <Route path="/image-checker" element={<ImageChecker />} />
             <Route path="/inspiration" element={<Inspiration />} />

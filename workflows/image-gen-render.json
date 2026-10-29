@@ -1,0 +1,307 @@
+{
+  "id": "imagegenrender",
+  "name": "Image Gen - Render (job -> Gemini per size -> Postgres)",
+  "nodes": [
+    {
+      "id": "imggen-1",
+      "name": "Image Gen Render (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "image-gen-render",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "image-gen-render"
+    },
+    {
+      "id": "imggen-2",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet body = (input && input.body !== undefined) ? input.body : input;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\nconst job_id = ((body || {}).job_id || '').toString().trim();\nif (!/^[0-9a-f-]{36}$/i.test(job_id)) throw new Error('job_id (uuid) is required');\nreturn [{ json: { job_id } }];"
+      }
+    },
+    {
+      "id": "imggen-3",
+      "name": "Fetch Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=http://postgrest:3000/image_gen_jobs?id=eq.{{ $json.job_id }}&select=*,image_gen_generations(id,size,render_status)",
+        "options": {}
+      }
+    },
+    {
+      "id": "imggen-4",
+      "name": "Mark Running",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=http://postgrest:3000/image_gen_jobs?id=eq.{{ $('Parse Input').first().json.job_id }}",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"status\":\"running\",\"error\":null}"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "imggen-5",
+      "name": "Fetch References",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=http://postgrest:3000/brand_references?select=id,image_b64,mime_type&id={{ ($('Fetch Job').first().json.reference_ids || []).length ? 'in.(' + $('Fetch Job').first().json.reference_ids.join(',') + ')' : 'is.null' }}",
+        "options": {}
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "imggen-6",
+      "name": "Build Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Size table — keep in sync with SIZES in dashboard/src/lib/imageGen.ts.\nconst SIZES = {\n  post:     { label: 'Square post',     aspect: '1:1',  w: 1080, h: 1080 },\n  portrait: { label: 'Portrait post',   aspect: '4:5',  w: 1080, h: 1350 },\n  story:    { label: 'Story / Reel',    aspect: '9:16', w: 1080, h: 1920 },\n  banner:   { label: 'Banner',          aspect: '16:9', w: 1200, h: 628 },\n};\n\nconst flatten = items => items.flatMap(i => Array.isArray(i.json) ? i.json : [i.json]);\nconst job = flatten($('Fetch Job').all())[0];\nif (!job || !job.id) throw new Error('Job not found');\nconst refs = flatten($('Fetch References').all()).filter(r => r && r.image_b64);\n\nconst gens = (job.image_gen_generations || []).filter(g => g.render_status === 'rendering');\nif (!gens.length) throw new Error('No generations waiting to render for job ' + job.id);\n\nconst refParts = refs.map(r => ({ inlineData: { mimeType: r.mime_type || 'image/png', data: r.image_b64 } }));\n\nreturn gens.map(g => {\n  const s = SIZES[g.size] || SIZES.post;\n  const text = job.prompt_drafted +\n    '\\n\\nFormat: ' + s.label + ', ' + s.aspect + ' aspect ratio (final crop ' + s.w + 'x' + s.h + 'px). Fill the whole frame; keep key subjects and any text away from the edges.' +\n    (refParts.length\n      ? '\\n\\nThe attached images are this brand\\'s reference images. Match their visual style — palette, lighting, rendering style, typography treatment and mood — but create a new image; do not copy them.'\n      : '');\n  return {\n    json: {\n      job_id: job.id,\n      generation_id: g.id,\n      size: g.size,\n      gemini_body: {\n        contents: [{ parts: [{ text }, ...refParts] }],\n        generationConfig: { responseModalities: ['IMAGE', 'TEXT'], imageConfig: { aspectRatio: s.aspect } },\n      },\n    },\n  };\n});"
+      }
+    },
+    {
+      "id": "imggen-7",
+      "name": "Gemini Render",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.gemini_body) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GEMINI_CRED_ID_HERE",
+          "name": "Gemini API Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "imggen-8",
+      "name": "Extract Image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const MODEL = 'gemini-2.5-flash-image';\nconst reqs = $('Build Requests').all();\nreturn $input.all().map((item, i) => {\n  const req = reqs[i] ? reqs[i].json : {};\n  const res = item.json || {};\n  let image_b64 = '';\n  let mime_type = 'image/png';\n  const parts = (res.candidates && res.candidates[0] && res.candidates[0].content && res.candidates[0].content.parts) || [];\n  for (const part of parts) {\n    if (part.inlineData && part.inlineData.data) { image_b64 = part.inlineData.data; mime_type = part.inlineData.mimeType || 'image/png'; break; }\n  }\n  let patch;\n  if (image_b64) {\n    patch = { render_status: 'done', image_b64, mime_type, generated_by: MODEL, error: null };\n  } else {\n    let reason = '';\n    if (res.error) reason = typeof res.error === 'string' ? res.error : (res.error.message || JSON.stringify(res.error));\n    else if (res.promptFeedback && res.promptFeedback.blockReason) reason = 'Blocked: ' + res.promptFeedback.blockReason;\n    else if (res.candidates && res.candidates[0] && res.candidates[0].finishReason) reason = 'No image returned (finishReason ' + res.candidates[0].finishReason + ')';\n    else reason = 'Gemini returned no image — check the Gemini credential, billing, and model availability';\n    patch = { render_status: 'failed', error: reason.slice(0, 1000), generated_by: MODEL };\n  }\n  return { json: { job_id: req.job_id, generation_id: req.generation_id, patch } };\n});"
+      }
+    },
+    {
+      "id": "imggen-9",
+      "name": "Save Generation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        0
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=http://postgrest:3000/image_gen_generations?id=eq.{{ $json.generation_id }}",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.patch) }}"
+      }
+    },
+    {
+      "id": "imggen-10",
+      "name": "Summarize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const results = $('Extract Image').all().map(i => i.json);\nconst done = results.filter(r => r.patch.render_status === 'done').length;\nconst failed = results.length - done;\nconst job_id = results.length ? results[0].job_id : $('Parse Input').first().json.job_id;\nreturn [{ json: { job_id, patch: done > 0\n  ? { status: 'done', error: failed ? (failed + ' of ' + results.length + ' sizes failed') : null }\n  : { status: 'failed', error: 'All sizes failed: ' + (results[0] ? results[0].patch.error : 'unknown') } } }];"
+      }
+    },
+    {
+      "id": "imggen-11",
+      "name": "Finish Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        0
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=http://postgrest:3000/image_gen_jobs?id=eq.{{ $json.job_id }}",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.patch) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Image Gen Render (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Job": {
+      "main": [
+        [
+          {
+            "node": "Mark Running",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Running": {
+      "main": [
+        [
+          {
+            "node": "Fetch References",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch References": {
+      "main": [
+        [
+          {
+            "node": "Build Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Requests": {
+      "main": [
+        [
+          {
+            "node": "Gemini Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Render": {
+      "main": [
+        [
+          {
+            "node": "Extract Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Image": {
+      "main": [
+        [
+          {
+            "node": "Save Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Generation": {
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize": {
+      "main": [
+        [
+          {
+            "node": "Finish Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

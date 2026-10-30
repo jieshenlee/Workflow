@@ -10,12 +10,12 @@
 -- If the API isn't on http://localhost:8000 (PUBLIC_API_URL), change the
 -- URL below first. Idempotent, and a no-op on a fresh database.
 --
--- Apply:
---   Get-Content db\migrate-python-backend.sql | docker compose exec -T postgres psql -U projectdigital -d projectdigital
+-- Applied automatically by `python -m scripts.copy_data` when you move
+-- your old data into Supabase.
 
 DO $$
 BEGIN
-  IF to_regclass('public.approval_stages') IS NOT NULL THEN
+  IF to_regclass('approval_stages') IS NOT NULL THEN
     UPDATE approval_stages
        SET resume_url = 'http://localhost:8000/api/approvals/' || id || '/resume'
      WHERE status = 'pending';

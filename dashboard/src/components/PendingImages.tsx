@@ -117,7 +117,7 @@ export function ImageCard({ approval }: { approval: PendingImage }) {
         ) : (
           <div className="card" style={{ borderColor: 'var(--red-100)', background: 'var(--red-50)' }}>
             <div className="card-body" style={{ color: 'var(--red)', fontSize: 13 }}>
-              No image attached to this approval. Check the API logs (docker compose logs api) for errors.
+              No image attached to this approval. Check the API window for errors.
             </div>
           </div>
         )}

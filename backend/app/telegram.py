@@ -157,7 +157,7 @@ def handle_update(update: dict) -> None:
     if str(chat_id) not in settings.telegram_allowed_chat_ids:
         log.warning("telegram: ignoring message from unlisted chat %s", chat_id)
         reply(chat_id, message_id, f"This bot is private. If it's yours, add {chat_id} to TELEGRAM_ALLOWED_CHAT_IDS "
-                                   "in .env and run: docker compose up -d --force-recreate api")
+                                   "in .env and restart the API.")
         return
     if (msg.get("text") or "").strip() in ("/start", "/help"):
         reply(chat_id, message_id, "Share or forward a photo, video, or post link here and I'll tag it and save it "

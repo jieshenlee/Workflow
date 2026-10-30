@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { API_URL, pgGet } from '../../lib/api'
+import { signOut, useSession } from '../../lib/auth'
 import type { ContentJob } from '../../lib/types'
 import { I } from './Icon'
 import { useJobNav } from './JobNav'
@@ -16,6 +17,7 @@ const PENDING_STATUSES = new Set(['brainstorm', 'research', 'outline', 'drafting
 
 export function Sidebar({ current, onNav }: Props) {
   const { openJob } = useJobNav()
+  const session = useSession()
   const [recentOpen, setRecentOpen] = useState(() => localStorage.getItem('sb-recent-open') !== '0')
   const toggleRecent = () => {
     setRecentOpen(v => {
@@ -117,7 +119,9 @@ export function Sidebar({ current, onNav }: Props) {
         <div className="sb-avatar">JS</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="sb-user-name">Jieshen</div>
-          <div className="sb-user-role">Solo creator</div>
+          <div className="sb-user-role" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={session?.email}>
+            {session?.email || 'Solo creator'}
+          </div>
         </div>
         <a
           href={`${API_URL}/docs`}
@@ -129,6 +133,14 @@ export function Sidebar({ current, onNav }: Props) {
         >
           <I.external size={14} />
         </a>
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ padding: '5px 7px', color: 'var(--sidebar-text-muted)', fontSize: 11.5 }}
+          onClick={signOut}
+          title="Sign out"
+        >
+          Sign out
+        </button>
       </div>
     </aside>
   )

@@ -10,11 +10,20 @@ _Last updated: 2026-10-29_
 
 ## TL;DR for a new chat
 
+**2026-10-30: No Docker. The database is Supabase.** Supabase hosts the
+Postgres database, the data API the dashboard uses (the same PostgREST we
+ran in Docker) and the login. The API and dashboard run directly on your
+machine (`.\scripts\dev.ps1`). Because Supabase's API is on the internet,
+the dashboard now has an email + password login, and row-level security
+(`db/supabase-rls.sql`) only lets emails in `dashboard_users` through.
+Setup is in README.md → Getting started. Old data moves across with
+`python -m scripts.copy_data`.
+
 **2026-10-29: n8n is gone. Everything runs on a Python (FastAPI) backend
 in `backend/`.** Every n8n workflow the dashboard calls was ported
 one-for-one (same prompts, models and request/response shapes) into plain Python with
-tests. n8n, Appsmith and the `transcript-service` sidecar are out of
-`docker-compose.yml`. The old workflow JSON is archived in `legacy/n8n/`.
+tests. n8n, Appsmith and the `transcript-service` sidecar are gone. The
+old workflow JSON is archived in `legacy/n8n/`.
 See `backend/README.md` for the layout, endpoints and how gates work.
 
 **What changed in practice:**
@@ -29,13 +38,17 @@ See `backend/README.md` for the layout, endpoints and how gates work.
 - yt-dlp runs inside the API, so the separate transcript sidecar is gone.
 
 **⚠️ One-time switch-over on your machine (not yet done):**
-1. `docker compose up -d --build`. This starts `api`, and n8n/Appsmith stop being started.
-2. Run `db/migrate-python-backend.sql`. It re-points gates still waiting on n8n at the API.
-3. Run any `db/migrate-*.sql` you hadn't run yet. Restart postgrest after DDL.
-4. Make sure `.env` has `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`
-   and `SANITY_API_TOKEN` (plus, optionally, `TELEGRAM_BOT_TOKEN` for the bot). Before, these lived in n8n credentials; now the
-   API reads them from `.env`.
-5. Open http://localhost:8000/health, then run a test topic end to end.
+1. Follow README.md → Getting started: create the Supabase project, fill
+   in `.env` (Supabase values plus `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
+   `OPENAI_API_KEY` and `SANITY_API_TOKEN`; these used to live in n8n
+   credentials), then run `setup_db` and add your login user.
+2. `docker start projectdigital_postgres`, then
+   `python -m scripts.copy_data --from <old db url>`. This copies your jobs
+   and images, and re-points any gate still waiting on n8n at the API.
+3. `.\scripts\dev.ps1`, sign in, check http://localhost:8000/health, and
+   run a test topic end to end.
+4. Stop and delete the old containers (n8n, Appsmith, Postgres) in Docker
+   Desktop once you're happy.
 
 **⚠️ Ported from the newest exports in the repo.** Stages 1–4 came from
 `legacy/n8n/exports/Blog Path - Stages 1 & 2 (Brainstorm + Outline).json`,
@@ -79,14 +92,13 @@ Metricool paid; the plan is in `legacy/n8n/workflows/schedule-social.README.md`.
 
 ## What's running (infrastructure)
 
-`docker compose up -d` from this folder:
+`.\scripts\dev.ps1` from this folder (no Docker):
 
-| Service    | URL                          | Notes                                                       |
+| Piece      | Where                        | Notes                                                       |
 |------------|------------------------------|-------------------------------------------------------------|
-| Dashboard  | http://localhost:3000        | React + Vite + react-router (`/`, `/blog`, `/social`, `/images`, `/image-gen`, `/image-maker`, `/image-checker`, `/inspiration`, `/guidelines`, `/video-templates`, `/jobs/:id`). |
-| API        | http://localhost:8000        | Python FastAPI (`backend/`). Docs at `/docs`, key check at `/health`, logs via `docker compose logs -f api`. Hot-reloads on save. |
-| PostgREST  | http://localhost:3001        | REST API over Postgres for the dashboard's plain reads/writes. |
-| Postgres   | localhost:5432               | DB `projectdigital` (an old `n8n` DB may still exist; unused). |
+| Dashboard  | http://localhost:3000        | React + Vite (`npm run dev`); sign in with your Supabase user. Routes: `/`, `/blog`, `/social`, `/images`, `/image-gen`, `/image-maker`, `/image-checker`, `/inspiration`, `/guidelines`, `/video-templates`, `/jobs/:id`. |
+| API        | http://localhost:8000        | Python FastAPI (`backend/`, `uvicorn --reload`). Docs at `/docs`; database, key and Telegram check at `/health`; logs in its window. |
+| Supabase   | supabase.com (cloud)         | Postgres + data API (PostgREST) + Auth. Free tier: 500 MB database. |
 
 External services (called only by the API):
 - **Claude API**: Haiku 4.5 for brainstorm, image prompt, meta, slogans, Image Gen draft; Sonnet 4.6 for outline, draft, captions, PDF/blog guidelines, image check, video fallback.
@@ -221,9 +233,11 @@ added to match the live table), **`inspiration_items`**, **`guideline_items`**,
    have `pipeline._render_hero` write to `images`. Then `generated_images`
    can be retired.
 
-**5. Optional: retire PostgREST.** The dashboard could read through the
-   API instead. That's only worth it if you want auth or business rules
-   on reads; it's not needed today.
+**5. Move images to Supabase Storage.** Images (generated, uploaded,
+   references, inspiration previews) are base64 text inside the database.
+   The free tier's 500 MB will fill after a few hundred images. Store the
+   files in Supabase Storage (1 GB free) and keep only their URLs in the
+   tables.
 
 **Phase 3 — native social path.** Topic → social-only flow (no blog).
    Out of scope for now.
@@ -235,26 +249,25 @@ added to match the live table), **`inspiration_items`**, **`guideline_items`**,
 ## Known issues / cleanup
 
 - **Not yet run against real APIs since the port** (see TL;DR).
-- **Fresh-DB init order:** on an empty volume Postgres runs `db/*.sql`
-  alphabetically, so the `migrate-*.sql` files run before `schema.sql`
-  and some fail. Existing DBs are unaffected. Fix by renaming `schema.sql`
-  to sort first, or by moving migrations out of the init folder.
+- **Supabase setup and the login are untested against a real Supabase project.** Tested on plain Postgres with a stand-in for Supabase's `auth` schema.
 - `PendingImages` AI badge label says "Gemini Imagen 3"; it's Imagen 4. Cosmetic.
 - **Warm-films job stuck at `image`.** It errored before the Imagen-4 fix.
   On the API, set its status to `failed` and click **Retry step**, or delete it.
 - `JobDetail` / `PendingImages` / `PublishPanel` still use legacy
   `generated_images` (see NEXT #4).
-- **`db/migrate-images.sql` may not have been run yet.** Until it is, the
-  Image Library page shows "No images yet."
-- Old n8n data (`n8n_data` volume, `n8n` DB) is unused; delete when you're
-  sure you don't need it.
+- **Image Library may be empty after the move.** If the old database never
+  ran the generated_images → images backfill, paste
+  `legacy/db-migrations/migrate-images.sql` into Supabase → SQL Editor and
+  run it (it's idempotent).
+- **The old Docker containers and volumes** (n8n, Appsmith, Postgres) are
+  unused once the data is copied. Delete them in Docker Desktop.
 
 ---
 
 ## How to run a topic (the golden path)
 
-1. `docker compose up -d`. After changing `.env`, run
-   `docker compose up -d --force-recreate api`.
+1. `.\scripts\dev.ps1` and sign in. After changing `.env`, restart the API
+   (Ctrl+C in its window, then run it again).
 2. http://localhost:3000 → **Start a topic** → click Start.
 3. Watch the **Processing** card, then approve at each gate:
    Brainstorm → Outline → Draft → Image. If a step fails, open the job
@@ -272,14 +285,16 @@ added to match the live table), **`inspiration_items`**, **`guideline_items`**,
 
 Auto-memory at `C:\Users\SHERWIN\.claude\projects\d--ProjectDigital-WORKFLOW\memory\`:
 
-- **PostgREST schema cache:** after any DDL, restart postgrest or embeds 404. (`postgrest-schema-cache-reload`)
+- **PostgREST schema cache:** Supabase reloads it automatically after DDL. (The `postgrest-schema-cache-reload` memory only applied to the Docker setup.)
+- **New table → re-run `python -m scripts.setup_db`.** Otherwise row-level security isn't switched on for it, and the dashboard can't read it (or anyone with the anon key can, if RLS is off).
+- **Supabase connection: use the Session pooler string.** The "Direct connection" host is IPv6-only on the free tier and fails on most home networks.
 - **PowerShell ASCII-only scripts** + no `<` stdin redirection. (`powershell-ascii-only-scripts`)
 - **Dashboard = React, not Appsmith.** (`react-dashboard-decision`)
 - **Content gen uses the Anthropic API key**, not Claude Code. (`use-anthropic-api-not-headless`)
 
 New gotchas (not yet in auto-memory — worth formalizing):
 - **Gemini Imagen model name:** use `imagen-4.0-generate-001` (or `-fast-` / `-ultra-`); `imagen-3.0-generate-002` 404s.
-- **The API only reads `.env` at container (re)create.** Run `docker compose up -d --force-recreate api` after changing keys.
+- **The API and dashboard only read `.env` at startup.** Restart them after changing keys.
 - **PowerShell `$` in a literal key:** PS expands as a variable and mangles the key. Always use `$key="..."; "...?key=$key"`.
 - **Postiz needs Temporal + Elasticsearch in self-host.** Temporal SQL visibility store has a 3-Text-search-attribute limit; ES sidesteps it. RAM + per-platform OAuth setup made it not worth it for MVP — reverted to Metricool 2026-06-01.
 

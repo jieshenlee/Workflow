@@ -359,7 +359,7 @@ export function PublishPanel({ job }: { job: JobForPublish }) {
             </button>
           </div>
           {save.isError && <p style={{ margin: 0, fontSize: 12.5, color: 'var(--red)' }}>Save failed: <span className="mono">{String(save.error)}</span></p>}
-          {genError && <p style={{ margin: 0, fontSize: 12.5, color: 'var(--amber)' }}>Generate failed — is the API running? Check <span className="mono">docker compose logs api</span>.</p>}
+          {genError && <p style={{ margin: 0, fontSize: 12.5, color: 'var(--amber)' }}>Generate failed — is the API running? Check its window for errors.</p>}
           {publish.isError && <p style={{ margin: 0, fontSize: 12.5, color: 'var(--amber)' }}>Publish failed: {String(publish.error)}. Fields still save with "Save fields".</p>}
         </div>
       )}

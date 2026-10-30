@@ -2,7 +2,7 @@
 
 The dashboard creates the image_gen_jobs / image_gen_generations rows
 itself, then calls /render with the job id. Rendering runs in the
-background and writes straight to Postgres; the page polls PostgREST.
+background and writes straight to Postgres; the page polls Supabase.
 """
 
 import logging

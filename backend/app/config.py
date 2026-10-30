@@ -1,7 +1,13 @@
-"""Settings, read once from the environment (docker-compose passes .env through)."""
+"""Settings, read once from the environment. The repo-root .env is loaded
+first (real environment variables win), so `uvicorn` needs no wrapper."""
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 
 def _env(name: str, default: str = "") -> str:
@@ -10,8 +16,10 @@ def _env(name: str, default: str = "") -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str = field(default_factory=lambda: _env(
-        "DATABASE_URL", "postgresql://projectdigital:projectdigital@localhost:5432/projectdigital"))
+    # Supabase → Project Settings → Database → Connection string → "Session pooler".
+    database_url: str = field(default_factory=lambda: _env("DATABASE_URL"))
+    # Postgres schema to use instead of public. Only the tests set this.
+    db_schema: str = field(default_factory=lambda: _env("DB_SCHEMA"))
     # Base URL the *browser* uses to reach this API. Approval gates store
     # f"{public_api_url}/api/approvals/<id>/resume" as their resume_url.
     public_api_url: str = field(default_factory=lambda: _env("PUBLIC_API_URL", "http://localhost:8000").rstrip("/"))

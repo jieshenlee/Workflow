@@ -23,6 +23,8 @@ import { I } from './components/ui/Icon'
 import { API_URL } from './lib/api'
 import { JobNavProvider } from './components/ui/JobNav'
 import JobDetail from './components/JobDetail'
+import Login from './components/Login'
+import { useSession } from './lib/auth'
 
 function StubPage({ title, breadcrumb, hint }: { title: string; breadcrumb: string[]; hint?: string }) {
   return (
@@ -188,6 +190,8 @@ function AppShell() {
 }
 
 export default function App() {
+  const session = useSession()
+  if (!session) return <Login />
   return (
     <JobNavProvider>
       <AppShell />

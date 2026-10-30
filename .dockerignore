@@ -1,6 +1,0 @@
-# Only backend/Dockerfile builds from the repo root; it needs backend/ and prompts/.
-*
-!backend/
-!prompts/
-backend/**/__pycache__
-backend/.pytest_cache

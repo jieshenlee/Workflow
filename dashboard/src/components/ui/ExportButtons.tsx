@@ -13,7 +13,7 @@ export function ExportButtons({ markdown, title }: { markdown: string; title: st
     try {
       await exportDocx(markdown, title, baseName)
     } catch {
-      setError('DOCX export needs a one-time install — run `docker compose restart dashboard`, or use .md for now.')
+      setError('DOCX export needs a one-time install — run `npm install` in dashboard/, or use .md for now.')
     } finally {
       setBusy(false)
     }

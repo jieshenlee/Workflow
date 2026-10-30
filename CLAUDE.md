@@ -128,18 +128,18 @@ Every approval stage must pause the workflow and surface content in the React da
 
 | Layer | Tool | Why |
 |---|---|---|
-| Backend / orchestration | **Python + FastAPI** (`backend/`, self-hosted via Docker) | Replaced n8n 2026-10-29. Every workflow was really Code nodes + raw HTTP calls, so n8n's canvas added export/import/credential overhead without much benefit (workflows lived outside git, env vars blocked in expressions, a Python sidecar just for yt-dlp). Approval gates are DB rows whose `resume_url` points at the API — no paused executions. See `backend/README.md`. |
-| Approval dashboard | **React + Vite + Tailwind** (`dashboard/`, self-hosted via Docker) | Hand-rolled; replaced Appsmith 2026-05-26. Low-code archaeology made iteration too painful — see auto-memory `react-dashboard-decision`. |
-| Database REST API | **PostgREST** (self-hosted via Docker) | Auto-generates a REST API over Postgres. The React dashboard reads/writes plain table data through this; anything that calls a model or external service goes through the FastAPI backend. |
+| Backend / orchestration | **Python + FastAPI** (`backend/`, runs locally with `uvicorn`) | Replaced n8n 2026-10-29. Every workflow was really Code nodes + raw HTTP calls, so n8n's canvas added export/import/credential overhead without much benefit (workflows lived outside git, env vars blocked in expressions, a Python sidecar just for yt-dlp). Approval gates are DB rows whose `resume_url` points at the API — no paused executions. See `backend/README.md`. |
+| Approval dashboard | **React + Vite + Tailwind** (`dashboard/`, runs locally with `npm run dev`) | Hand-rolled; replaced Appsmith 2026-05-26. Low-code archaeology made iteration too painful — see auto-memory `react-dashboard-decision`. |
+| Database REST API + login | **Supabase data API + Supabase Auth** | Supabase's data API is hosted PostgREST. The dashboard reads/writes plain table data through it, signed in with email + password. Row-level security (`db/supabase-rls.sql`) only lets emails in `dashboard_users` through, because the API is on the public internet. Anything that calls a model or external service goes through the FastAPI backend, which connects to the database directly. |
 | AI content generation | **Claude API** (Anthropic) | Blog drafts, outlines, brainstorming, per-platform caption rewrites |
 | Image generation | **Google Gemini Imagen 4** (blog hero) + **Gemini 2.5 Flash Image** (Image Maker, Image Gen) | Called from the backend; user approves or regenerates |
-| Database | **PostgreSQL** (via Docker) or **Supabase** (cloud free tier) | Stores drafts, approval status, image URLs, platform captions |
+| Database | **Supabase** (hosted Postgres, free tier) | Stores drafts, approval status, images, platform captions. Moved off local Docker Postgres 2026-10-30, along with the rest of Docker. Free tier is 500 MB, and images are base64 in the DB today, so moving them to Supabase Storage is the next storage step. |
 | File storage | **Cloudflare R2** or **AWS S3** | Stores generated images and video files |
 | URL shortening | **Bitly API** | Free tier covers basic usage |
 | Social scheduling | **Metricool** (SaaS) | Free tier covers Facebook, Instagram, Threads, TikTok, YouTube, Pinterest — dashboard generates captions, you copy them into Metricool's UI. Paid plans ($18/mo+) unlock REST API access so the backend can schedule directly. Switched back from Postiz 2026-06-01 — self-host scheduler was too much infrastructure (Temporal + Elasticsearch + per-platform OAuth dev apps) for MVP-stage scheduling needs. |
 | Inspiration capture | **Telegram Bot API** | Zero-friction mobile capture — most social apps support native "Share → Telegram." One bot ingests photos, videos and post links for Branch 3 (see above). It long-polls from the API, so no public URL or tunnel is needed. |
 | Guideline narration | **OpenAI TTS** (`tts-1`) | Narrates the AI-generated summary of each confirmed guideline for Branch 4 (see above). Reuses the existing `OPENAI_API_KEY` — no new key needed. |
-| Containerisation | **Docker Desktop** | Runs Postgres + API + PostgREST + dashboard locally with one command (`docker compose up -d`) |
+| Local dev | **No Docker** (removed 2026-10-30) | `scripts/dev.ps1` starts the API + dashboard in two windows; the database is in the cloud. |
 | Version control | **Git + GitHub** | Track workflow configs and dashboard code |
 
 ---
@@ -153,7 +153,7 @@ ProjectDigital/
 ├── .env                       ← real keys — never commit this
 ├── .env.example               ← template with comments — commit this
 ├── .gitignore
-├── docker-compose.yml         ← spins up Postgres + API + PostgREST + dashboard
+├── scripts/dev.ps1            ← starts API + dashboard (no Docker)
 │
 ├── docs/
 │   ├── workflow-blog-path.png
@@ -166,9 +166,9 @@ ProjectDigital/
 │
 ├── dashboard/                 ← React + Vite approval dashboard
 │
-├── db/                        ← schema.sql + one-off migrate-*.sql
+├── db/                        ← schema.sql + supabase-rls.sql (applied by backend/scripts/setup_db.py)
 │
-├── legacy/n8n/                ← archived n8n workflows (no longer run)
+├── legacy/                    ← archived n8n workflows + Docker-era DB migrations (no longer run)
 │
 ├── scripts/                   ← utility scripts (e.g. resize images, test APIs)
 │   └── test-apis.sh
@@ -193,7 +193,7 @@ ProjectDigital/
 Build the Blog Path first — it's linear, easier to test end-to-end, and proves the approval loop works before adding the complexity of multi-platform social routing.
 
 **Phase 1 — Infrastructure**
-- [ ] Docker Compose up (Postgres + API + PostgREST + dashboard)
+- [ ] Supabase project + `setup_db`, API + dashboard running (`scripts/dev.ps1`)
 - [ ] Environment variables configured
 - [ ] APIs tested (Claude, OpenAI, Bitly)
 
@@ -224,7 +224,7 @@ See `.env.example` for full list. Key ones:
 - `GEMINI_API_KEY` — get from aistudio.google.com (alternative image gen)
 - `BITLY_ACCESS_TOKEN` — get from dev.bitly.com
 - `METRICOOL_USER_TOKEN` + `METRICOOL_BRAND_ID` — only needed on a paid Metricool plan; generate the token from metricool.com → Settings → API
-- `SUPABASE_URL` + `SUPABASE_ANON_KEY` — from supabase.com dashboard
+- `DATABASE_URL` (Session pooler string) + `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` — from the Supabase project settings
 
 ---
 
@@ -234,7 +234,7 @@ See `.env.example` for full list. Key ones:
 - **Always follow the build order above.** Don't jump ahead to social path until blog path is tested.
 - **Never publish content without an approval gate.** Every workflow must pause at each approval stage.
 - **Prompts:** `/prompts/*.md` hold the prompt templates; the backend can load them with `prompts.load_section()` (Image Gen does). The blog/social/tool system prompts that were live in n8n were ported verbatim into `backend/app/prompts.py` — keep new system prompts in one of those two places rather than scattered through route code.
-- **All backend logic is Python in `backend/`.** Add a feature as a route in `backend/app/routers/`, with a test in `backend/tests/` (real Postgres, external APIs faked). Run `pytest` before committing. Approval gates go through `pipeline.open_gate()` — never advance a job without one.
+- **All backend logic is Python in `backend/`.** Add a feature as a route in `backend/app/routers/`, with a test in `backend/tests/` (real Postgres via `TEST_DATABASE_URL`, external APIs faked). Run `pytest` before committing. New tables go in `db/schema.sql` (idempotent), then re-run `python -m scripts.setup_db` so row-level security covers them. Approval gates go through `pipeline.open_gate()` — never advance a job without one.
 - **Never commit `.env`.** Only `.env.example` gets committed.
 - **Content types and aspect ratios:**
   - Meme, Static Post, Carousel → 4:5
@@ -250,5 +250,5 @@ See `.env.example` for full list. Key ones:
 - Workflow was designed from two hand-drawn diagrams, then a digital diagram
 - Originally chose Appsmith over Retool for free + open-source. Switched to a React dashboard 2026-05-26 — Appsmith's low-code model required too much archaeology per new feature, and that was already biting at Stage 2.
 - Chose n8n over Make because n8n is open-source, self-hostable, and has direct Claude API integration via HTTP nodes. Switched n8n → Python/FastAPI 2026-10-29: the workflows had become Code nodes + raw HTTP calls, and the n8n overhead (manual JSON export, credential reattaching, blocked env vars, a Python sidecar for yt-dlp) outweighed the visual canvas. Old workflows in `legacy/n8n/`.
-- Backbone now: FastAPI backend + React dashboard + PostgREST + Postgres
+- Backbone now: FastAPI backend + React dashboard + Supabase (Postgres, data API, auth). Docker removed 2026-10-30: the database moved to Supabase, and the API + dashboard run directly with `uvicorn` / `npm run dev`.
 - Human approval at every major stage is a hard requirement, not optional

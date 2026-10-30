@@ -3,11 +3,10 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  // One .env for the whole project: read VITE_* variables from the repo root.
+  envDir: '..',
   server: {
-    host: '0.0.0.0',
     port: 3000,
-    watch: {
-      usePolling: true,
-    },
+    strictPort: true,
   },
 })

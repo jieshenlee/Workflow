@@ -7,12 +7,13 @@
 --   approval_stages    one row per approval gate hit by a job (audit trail)
 --   platform_captions  per-platform social copy for a job
 --
--- Apply locally:
---   docker compose exec -T postgres \
---     psql -U projectdigital -d projectdigital < db/schema.sql
+-- Apply (to the Supabase database in DATABASE_URL, together with
+-- supabase-rls.sql):
+--   cd backend; python -m scripts.setup_db --owner-email you@example.com
 --
--- Or let it auto-run on first DB boot via the docker-compose init mount
--- (see docker-compose.yml -> postgres volumes).
+-- Idempotent: safe to re-run after adding a table here. Every table in
+-- this file is the full current shape, so no migrate-*.sql is needed on
+-- a new database (the old ones are in legacy/db-migrations/).
 -- ─────────────────────────────────────────────────────────
 
 BEGIN;

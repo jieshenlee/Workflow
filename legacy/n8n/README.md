@@ -17,6 +17,6 @@ Still useful as plans, not code:
 - `workflows/schedule-social.README.md`: Metricool API scheduling (paid tier).
 - `workflows/regenerate-caption.README.md`: per-platform caption regeneration.
 
-Your old n8n data stays in the `n8n_data` Docker volume and the `n8n`
-database until you remove them (`docker volume rm <project>_n8n_data`).
-Nothing reads them any more.
+Docker itself was removed on 2026-10-30 (the database moved to Supabase).
+The old n8n container and its `n8n_data` volume can be deleted in Docker
+Desktop; nothing reads them any more.

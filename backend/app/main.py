@@ -35,9 +35,14 @@ app.include_router(image_gen.router)
 
 @app.get("/health")
 def health():
-    fetch_one("SELECT 1")
+    try:
+        fetch_one("SELECT 1")
+        database = "ok"
+    except Exception as e:  # noqa: BLE001 — report any connection problem as text
+        database = f"error: {e}"
     return {
-        "ok": True,
+        "ok": database == "ok",
+        "database": database,
         "keys": {
             "anthropic": bool(settings.anthropic_api_key),
             "gemini": bool(settings.gemini_api_key),

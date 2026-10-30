@@ -112,7 +112,7 @@ export default function VideoTemplates() {
       try {
         data = JSON.parse(text)
       } catch {
-        throw new Error('API returned an invalid response — check docker compose logs api.')
+        throw new Error('API returned an invalid response — check the API window for errors.')
       }
       if (!data.success) throw new Error(data.error || 'Gemini could not extract a template from this video')
       setResult({

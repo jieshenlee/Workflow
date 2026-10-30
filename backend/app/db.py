@@ -3,7 +3,7 @@
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-from psycopg import Connection
+from psycopg import Connection, sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
@@ -15,11 +15,20 @@ __all__ = ["Jsonb", "fetch_one", "fetch_all", "execute", "transaction", "close_p
 _pool: ConnectionPool | None = None
 
 
+def _configure(conn: Connection) -> None:
+    if settings.db_schema:
+        conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(settings.db_schema)))
+        conn.commit()
+
+
 def _get_pool() -> ConnectionPool:
     global _pool
     if _pool is None:
-        _pool = ConnectionPool(settings.database_url, min_size=1, max_size=10,
-                               kwargs={"row_factory": dict_row}, open=True)
+        if not settings.database_url:
+            raise RuntimeError("DATABASE_URL is not set — add your Supabase connection string to .env")
+        # prepare_threshold=None: Supabase's pooler can't share prepared statements across clients.
+        _pool = ConnectionPool(settings.database_url, min_size=1, max_size=10, configure=_configure,
+                               kwargs={"row_factory": dict_row, "prepare_threshold": None}, open=True)
     return _pool
 
 

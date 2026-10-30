@@ -1,11 +1,12 @@
-"""Test harness: a throwaway Postgres database built from db/schema.sql, and
+"""Test harness: a throwaway Postgres schema built from db/schema.sql, and
 fakes for every external API (Claude, Gemini, Imagen, OpenAI TTS, Sanity,
-TinyURL). Point TEST_DATABASE_ADMIN_URL at a server where you may create
-databases, e.g.
+TinyURL, Telegram). Point TEST_DATABASE_URL at any Postgres you can create
+schemas in. A spare free Supabase project works; don't use your real one:
 
-    TEST_DATABASE_ADMIN_URL=postgresql://projectdigital:projectdigital@localhost:5432/postgres pytest
+    TEST_DATABASE_URL=postgresql://postgres.<ref>:<password>@<pooler-host>:5432/postgres pytest
 
-Tests are skipped when no server is reachable.
+Each run creates a pd_test_<random> schema and drops it afterwards. Tests
+are skipped when TEST_DATABASE_URL isn't set or reachable.
 """
 
 import json
@@ -15,39 +16,50 @@ from pathlib import Path
 
 import psycopg
 import pytest
+from psycopg import sql
 
 ROOT = Path(__file__).resolve().parents[2]
-ADMIN_URL = os.environ.get("TEST_DATABASE_ADMIN_URL",
-                           "postgresql://projectdigital:projectdigital@localhost:5432/postgres")
-DB_NAME = f"pd_test_{uuid.uuid4().hex[:8]}"
+TEST_URL = os.environ.get("TEST_DATABASE_URL", "")
+SCHEMA = f"pd_test_{uuid.uuid4().hex[:8]}"
+
+# app.config reads the environment once at import (and .env never overrides
+# real variables), so pin everything before any app import.
+os.environ.update({"DATABASE_URL": TEST_URL, "DB_SCHEMA": SCHEMA, "TELEGRAM_BOT_TOKEN": "",
+                   "ANTHROPIC_API_KEY": "test-key", "GEMINI_API_KEY": "test-key",
+                   "OPENAI_API_KEY": "test-key", "SANITY_API_TOKEN": "test-key"})
 
 
-def _url_for(db: str) -> str:
-    return ADMIN_URL.rsplit("/", 1)[0] + "/" + db
+def connect(schema: str = SCHEMA, **kw) -> psycopg.Connection:
+    conn = psycopg.connect(TEST_URL, autocommit=True, prepare_threshold=None, **kw)
+    conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+    return conn
 
 
-# app.config reads the environment once at import, so set it before any app import.
-os.environ["DATABASE_URL"] = _url_for(DB_NAME)
-for _k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY", "SANITY_API_TOKEN"):
-    os.environ[_k] = "test-key"
+def create_schema(schema: str) -> None:
+    with psycopg.connect(TEST_URL, autocommit=True, prepare_threshold=None) as conn:
+        conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
+    with connect(schema) as conn:
+        conn.execute((ROOT / "db" / "schema.sql").read_text())
+
+
+def drop_schema(schema: str) -> None:
+    with psycopg.connect(TEST_URL, autocommit=True, prepare_threshold=None) as conn:
+        conn.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema)))
 
 
 @pytest.fixture(scope="session")
 def database_url():
+    if not TEST_URL:
+        pytest.skip("TEST_DATABASE_URL is not set")
     try:
-        admin = psycopg.connect(ADMIN_URL, autocommit=True, connect_timeout=3)
+        psycopg.connect(TEST_URL, connect_timeout=5).close()
     except psycopg.OperationalError as e:
-        pytest.skip(f"No Postgres for tests at {ADMIN_URL}: {e}")
-    with admin:
-        admin.execute(f'CREATE DATABASE "{DB_NAME}"')
-    url = _url_for(DB_NAME)
-    with psycopg.connect(url, autocommit=True) as conn:
-        conn.execute((ROOT / "db" / "schema.sql").read_text())
-    yield url
+        pytest.skip(f"No Postgres for tests at TEST_DATABASE_URL: {e}")
+    create_schema(SCHEMA)
+    yield TEST_URL
     from app.db import close_pool
     close_pool()
-    with psycopg.connect(ADMIN_URL, autocommit=True) as admin:
-        admin.execute(f'DROP DATABASE IF EXISTS "{DB_NAME}" WITH (FORCE)')
+    drop_schema(SCHEMA)
 
 
 @pytest.fixture(scope="session")
@@ -61,7 +73,7 @@ def client(database_url):
 
 @pytest.fixture()
 def db(database_url):
-    with psycopg.connect(database_url, autocommit=True, row_factory=psycopg.rows.dict_row) as conn:
+    with connect(row_factory=psycopg.rows.dict_row) as conn:
         yield conn
 
 

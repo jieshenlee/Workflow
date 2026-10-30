@@ -10,57 +10,81 @@ and [`STATUS.md`](./STATUS.md) for what's built and what's next.
 
 ## Stack
 
-| Layer | Tool | Local URL |
+| Layer | Tool | Where |
 |---|---|---|
-| Backend (AI steps, approval gates, integrations) | Python · FastAPI ([`backend/`](./backend)) | http://localhost:8000 (docs at `/docs`) |
-| Approval dashboard | React + Vite ([`dashboard/`](./dashboard)) | http://localhost:3000 |
-| Table reads/writes for the dashboard | PostgREST | http://localhost:3001 |
-| Database | PostgreSQL 15 | localhost:5432 |
+| Backend (AI steps, approval gates, integrations) | Python · FastAPI ([`backend/`](./backend)) | runs on your machine: http://localhost:8000 (docs at `/docs`) |
+| Approval dashboard | React + Vite ([`dashboard/`](./dashboard)) | runs on your machine: http://localhost:3000 |
+| Database + data API + login | **Supabase** (hosted Postgres; its data API is PostgREST) | supabase.com, free tier |
 | Content gen | Claude API | — |
 | Image gen | Gemini Imagen 4 / Gemini 2.5 Flash Image | — |
 | Narration | OpenAI TTS | — |
 | CMS | Sanity | — |
 | Shortlinks | TinyURL | — |
+| Inspiration capture | Telegram bot (optional) | — |
 | Social scheduling | Metricool (SaaS, manual on free tier) | metricool.com |
 
-n8n was the orchestrator until 2026-10-29; its workflows are archived in
-[`legacy/n8n/`](./legacy/n8n) for reference.
+No Docker. n8n (until 2026-10-29) and the Docker setup are archived in [`legacy/`](./legacy).
 
 ---
 
-## Getting started
+## Getting started (Windows)
 
-### 1. Configure environment
+You need **Python 3.12+** (python.org; tick "Add to PATH"), **Node.js 20+** (nodejs.org) and a free **Supabase** account.
 
-```powershell
-Copy-Item .env.example .env
-# then edit .env: API keys + a strong POSTGRES_PASSWORD
-```
+### 1. Create the Supabase project
 
-### 2. Bring up the stack
+1. supabase.com → **New project**. Pick a region near you and save the database password.
+2. Copy `.env.example` to `.env` and fill in:
+   - `DATABASE_URL`: Project Settings → Database → Connection string → **Session pooler**, with your password filled in.
+   - `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`: Project Settings → API.
+   - Your AI keys (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `SANITY_API_TOKEN`).
+3. Supabase → **Authentication → Sign In / Providers**: turn **off** "Allow new users to sign up".
+4. Supabase → **Authentication → Users → Add user**: your email + a password, with "Auto Confirm User" ticked.
 
-```powershell
-docker compose up -d --build
-```
-
-Postgres auto-applies [`db/schema.sql`](./db/schema.sql) on first boot (empty volume only).
-Check the API sees your keys: http://localhost:8000/health
-
-### 3. Use it
-
-http://localhost:3000 → **Start a topic** → approve each gate as it appears.
-
-### Without Docker (optional)
-
-Only Postgres + PostgREST need to run in Docker (`docker compose up -d postgres postgrest`):
+### 2. Install and create the tables
 
 ```powershell
 cd backend
-python -m venv .venv; .venv\Scripts\activate
-pip install -r requirements-dev.txt
-$env:ANTHROPIC_API_KEY="..."   # etc. — see backend/README.md
-uvicorn app.main:app --reload --port 8000
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m scripts.setup_db --owner-email you@example.com
+cd ..\dashboard
+npm install
 ```
+
+`setup_db` creates every table and turns on row-level security, so only
+the email(s) you pass can read or write through Supabase's API.
+
+### 3. Run it
+
+```powershell
+.\scripts\dev.ps1
+```
+
+This opens the API and the dashboard in two windows and launches http://localhost:3000.
+Sign in with the user from step 1.4. Check http://localhost:8000/health if anything looks off.
+
+(Mac/Linux: `./scripts/dev.sh`.)
+
+### Moving your existing data (one time)
+
+If you have jobs in the old Docker database, start just that container one
+last time (Docker Desktop must be running; the container keeps its name
+even though the compose file is gone):
+
+```powershell
+docker start projectdigital_postgres
+```
+
+then copy everything across:
+
+```powershell
+cd backend
+python -m scripts.copy_data --from "postgresql://projectdigital:<old POSTGRES_PASSWORD>@localhost:5432/projectdigital"
+```
+
+After that, Docker Desktop can be uninstalled.
 
 ---
 
@@ -70,28 +94,29 @@ uvicorn app.main:app --reload --port 8000
 WORKFLOW/
 ├── CLAUDE.md            project context — read first
 ├── STATUS.md            living progress doc
-├── docker-compose.yml   postgres + api + postgrest + dashboard
 ├── .env.example         env template (copy to .env)
 ├── backend/             Python API — every AI step + approval gate (see backend/README.md)
+│   └── scripts/         setup_db.py · copy_data.py
 ├── dashboard/           React approval dashboard
-├── db/                  schema.sql + one-off migrations
+├── db/                  schema.sql · supabase-rls.sql
 ├── prompts/             prompt templates
-├── scripts/             test-apis.{ps1,sh}
-└── legacy/n8n/          archived n8n workflows (no longer run)
+├── scripts/             dev.ps1 / dev.sh (start everything) · test-apis.{ps1,sh}
+└── legacy/              archived n8n workflows + Docker-era DB migrations
 ```
 
 ---
 
 ## Data model
 
-- **`content_jobs`** — one row per topic. Tracks branch (`blog`/`social`), `status`,
-  chosen angle, keywords, outline, draft, URLs; misc state in the `data` jsonb column.
-- **`approval_stages`** — one row per gate. The API inserts a `pending` row whose
+- **`content_jobs`**: one row per topic. Tracks branch (`blog`/`social`), `status`,
+  chosen angle, keywords, outline, draft and URLs; misc state is in the `data` jsonb column.
+- **`approval_stages`**: one row per gate. The API inserts a `pending` row whose
   `resume_url` points back at the API; the dashboard POSTs the reviewer's input there,
   which closes the gate and runs the next step.
-- **`platform_captions`** — per-platform social copy (one row per job × platform).
+- **`platform_captions`**: per-platform social copy (one row per job × platform).
 - Tool tables: `images`, `image_maker_projects`, `image_checks`, `inspiration_items`,
   `guideline_items`, `video_templates`, `brand_projects` / `image_gen_*`.
+- **`dashboard_users`**: emails allowed through row-level security.
 
 ---
 
@@ -110,6 +135,10 @@ WORKFLOW/
 
 ## Notes
 
+- **Supabase free tier = 500 MB database.** Images are stored inside the database
+  as base64 text, so a few hundred images can fill it. Moving them to Supabase
+  Storage is the planned fix (see STATUS.md).
+- **`.env` is gitignored.** Only `.env.example` is committed. Never commit real keys,
+  and never put the Supabase `service_role` key in a `VITE_` variable.
 - **No `caption-youtube.md` yet.** The social path lists YouTube but has no template.
-- **`.env` is gitignored** — only `.env.example` is committed. Never commit real keys.
 - **Cost target:** ~$15–40/month at solo-founder scale; prefer free tiers.

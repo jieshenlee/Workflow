@@ -135,7 +135,7 @@ export default function Jobs({ branchOnly }: { branchOnly?: 'blog' | 'social' } 
             <p style={{ margin: 0, fontWeight: 500 }}>Failed to load jobs.</p>
             <p style={{ margin: '4px 0 0', fontSize: 12 }} className="mono">{String(error)}</p>
             <p style={{ margin: '8px 0 0', fontSize: 12 }}>
-              Is PostgREST running? Try <code className="mono">docker compose ps postgrest</code>.
+              Can't reach Supabase. Check <code className="mono">VITE_SUPABASE_URL</code> in .env, and that you ran <code className="mono">python -m scripts.setup_db</code>.
             </p>
           </div>
         </div>

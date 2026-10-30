@@ -106,7 +106,7 @@ Real environment variables take precedence.
 | `OPENAI_API_KEY` | guideline narration (TTS) |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_CHAT_IDS` | Telegram inspiration bot (optional; off when unset) |
 | `SANITY_API_TOKEN` (+ `SANITY_PROJECT_ID`, `SANITY_DATASET`, `SITE_URL`) | Publish to Sanity |
-| `DATABASE_URL` | Supabase → Project Settings → Database → Connection string → **Session pooler** |
+| `DATABASE_URL` | Supabase → **Connect** (top bar) → Connection string → **Session pooler**; password from Database → Settings |
 | `PUBLIC_API_URL` | the API's URL as the browser sees it (default `http://localhost:8000`) |
 | `CORS_ORIGINS` | dashboard origins (default `http://localhost:3000`) |
 

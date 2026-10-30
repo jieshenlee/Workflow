@@ -37,7 +37,9 @@ The project **project-digital** (Singapore) already exists, with every
 table and the access rules in place. What's left needs you in the
 Supabase dashboard (supabase.com → project-digital):
 
-1. **Project Settings → Database → Reset database password.** Save it somewhere safe.
+1. **Database (left sidebar) → Settings → Reset database password**
+   (direct link: https://supabase.com/dashboard/project/klobetmoszgubrzzhxdw/database/settings).
+   Save it somewhere safe; Supabase won't show it again. A new password can take a few minutes to start working.
 2. **Authentication → Sign In / Providers:** turn **off** "Allow new users to sign up".
 3. **Authentication → Users → Add user:** jieshensherwinlee@gmail.com + a password,
    with "Auto Confirm User" ticked. (This exact email is the one allowed through.)

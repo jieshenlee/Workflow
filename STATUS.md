@@ -50,8 +50,8 @@ connector:
 The URL and publishable key are pre-filled in `.env.example`.
 
 **⚠️ One-time switch-over on your machine (not yet done):**
-1. In Supabase: set a database password (Project Settings → Database →
-   Reset password), turn off new-user sign-ups, and add your login user
+1. In Supabase: set a database password (Database → Settings →
+   Reset database password), turn off new-user sign-ups, and add your login user
    (Authentication → Users → Add user, auto-confirm). Copy `.env.example`
    to `.env`, then fill in `DATABASE_URL` (Connect → Session pooler) and
    the AI keys (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`,

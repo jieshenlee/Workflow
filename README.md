@@ -31,30 +31,34 @@ No Docker. n8n (until 2026-10-29) and the Docker setup are archived in [`legacy/
 
 You need **Python 3.12+** (python.org; tick "Add to PATH"), **Node.js 20+** (nodejs.org) and a free **Supabase** account.
 
-### 1. Create the Supabase project
+### 1. Finish the Supabase project
 
-1. supabase.com → **New project**. Pick a region near you and save the database password.
-2. Copy `.env.example` to `.env` and fill in:
-   - `DATABASE_URL`: Project Settings → Database → Connection string → **Session pooler**, with your password filled in.
-   - `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`: Project Settings → API.
+The project **project-digital** (Singapore) already exists, with every
+table and the access rules in place. What's left needs you in the
+Supabase dashboard (supabase.com → project-digital):
+
+1. **Project Settings → Database → Reset database password.** Save it somewhere safe.
+2. **Authentication → Sign In / Providers:** turn **off** "Allow new users to sign up".
+3. **Authentication → Users → Add user:** jieshensherwinlee@gmail.com + a password,
+   with "Auto Confirm User" ticked. (This exact email is the one allowed through.)
+4. Copy `.env.example` to `.env`. The Supabase URL and publishable key are already filled in. Then add:
+   - `DATABASE_URL`: **Connect** (top bar) → Connection string → **Session pooler**, with the password from step 1.
    - Your AI keys (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `SANITY_API_TOKEN`).
-3. Supabase → **Authentication → Sign In / Providers**: turn **off** "Allow new users to sign up".
-4. Supabase → **Authentication → Users → Add user**: your email + a password, with "Auto Confirm User" ticked.
 
-### 2. Install and create the tables
+(Starting a brand-new project instead? Create it, fill in all the Supabase
+values in `.env`, and run `python -m scripts.setup_db --owner-email <you>`
+after installing below. It creates the tables and access rules.)
+
+### 2. Install
 
 ```powershell
 cd backend
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python -m scripts.setup_db --owner-email you@example.com
 cd ..\dashboard
 npm install
 ```
-
-`setup_db` creates every table and turns on row-level security, so only
-the email(s) you pass can read or write through Supabase's API.
 
 ### 3. Run it
 
@@ -116,7 +120,7 @@ WORKFLOW/
 - **`platform_captions`**: per-platform social copy (one row per job × platform).
 - Tool tables: `images`, `image_maker_projects`, `image_checks`, `inspiration_items`,
   `guideline_items`, `video_templates`, `brand_projects` / `image_gen_*`.
-- **`dashboard_users`**: emails allowed through row-level security.
+- **`private.dashboard_users`**: emails allowed through row-level security (in a schema the data API doesn't publish).
 
 ---
 

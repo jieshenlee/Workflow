@@ -141,6 +141,7 @@ CREATE INDEX IF NOT EXISTS idx_images_created_at ON images (created_at DESC);
 -- content_jobs.chosen_image_id — the library image the editor picked at Stage 4
 ALTER TABLE content_jobs
   ADD COLUMN IF NOT EXISTS chosen_image_id UUID REFERENCES images(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_content_jobs_chosen_image ON content_jobs (chosen_image_id);
 
 ALTER TABLE images ADD COLUMN IF NOT EXISTS metadata JSONB;
 
@@ -171,6 +172,7 @@ CREATE TABLE IF NOT EXISTS image_maker_projects (
 
 CREATE INDEX IF NOT EXISTS idx_image_maker_projects_status     ON image_maker_projects (status);
 CREATE INDEX IF NOT EXISTS idx_image_maker_projects_created_at ON image_maker_projects (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_image_maker_projects_library_image ON image_maker_projects (library_image_id);
 
 -- ── inspiration_items ──────────────────────────────────────
 -- Swipe-file capture: Jieshen forwards a trending photo/video to a
@@ -395,6 +397,7 @@ CREATE TABLE IF NOT EXISTS image_gen_jobs (
 CREATE INDEX IF NOT EXISTS idx_image_gen_jobs_brand      ON image_gen_jobs (brand_id);
 CREATE INDEX IF NOT EXISTS idx_image_gen_jobs_status     ON image_gen_jobs (status);
 CREATE INDEX IF NOT EXISTS idx_image_gen_jobs_created_at ON image_gen_jobs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_image_gen_jobs_parent     ON image_gen_jobs (parent_job_id);
 
 -- One row per (job, size). The API render step fills image_b64; the
 -- dashboard records the human review decision.
@@ -418,11 +421,13 @@ CREATE TABLE IF NOT EXISTS image_gen_generations (
 
 CREATE INDEX IF NOT EXISTS idx_image_gen_generations_job    ON image_gen_generations (job_id);
 CREATE INDEX IF NOT EXISTS idx_image_gen_generations_review ON image_gen_generations (review_status);
+CREATE INDEX IF NOT EXISTS idx_image_gen_generations_library_image ON image_gen_generations (library_image_id);
 
 -- ── updated_at auto-touch ──────────────────────────────────
-CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger
+LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
-$$ LANGUAGE plpgsql;
+$$;
 
 DO $$
 DECLARE t TEXT;

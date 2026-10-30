@@ -58,11 +58,15 @@ def test_rls_only_lets_listed_owner_through(fresh_schema):
         conn.execute("INSERT INTO content_jobs (topic, branch) VALUES ('secret', 'blog')")
         rls_off = conn.execute("SELECT count(*) FROM pg_tables WHERE schemaname = %s AND NOT rowsecurity", (schema,)).fetchone()[0]
         assert rls_off == 0
+        assert conn.execute("SELECT to_regclass(%s)", (f"{schema}.dashboard_users",)).fetchone()[0] is None  # not in the exposed schema
 
         _as_user(conn, "OWNER@example.com")  # case-insensitive
         assert conn.execute("SELECT count(*) FROM content_jobs").fetchone()[0] == 1
         conn.execute("INSERT INTO images (source, image_b64) VALUES ('upload', %s)", (PNG,))
-        assert conn.execute("SELECT count(*) FROM dashboard_users").fetchone()[0] == 0  # allow-list not readable
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):  # allow-list not readable
+            conn.execute("SELECT count(*) FROM private.dashboard_users")
+        conn.execute("RESET ROLE")
+        _as_user(conn, "owner@example.com")
 
         _as_user(conn, "stranger@example.com")
         assert conn.execute("SELECT count(*) FROM content_jobs").fetchone()[0] == 0

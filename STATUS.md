@@ -15,7 +15,7 @@ Postgres database, the data API the dashboard uses (the same PostgREST we
 ran in Docker) and the login. The API and dashboard run directly on your
 machine (`.\scripts\dev.ps1`). Because Supabase's API is on the internet,
 the dashboard now has an email + password login, and row-level security
-(`db/supabase-rls.sql`) only lets emails in `dashboard_users` through.
+(`db/supabase-rls.sql`) only lets emails in `private.dashboard_users` through.
 Setup is in README.md → Getting started. Old data moves across with
 `python -m scripts.copy_data`.
 
@@ -37,11 +37,27 @@ See `backend/README.md` for the layout, endpoints and how gates work.
 - Publish to Sanity is now synchronous and returns a real error message.
 - yt-dlp runs inside the API, so the separate transcript sidecar is gone.
 
+**Supabase project: `project-digital`** (ref `klobetmoszgubrzzhxdw`,
+Singapore, free plan). Created and set up 2026-10-30 via the Supabase
+connector:
+- all 14 tables from `db/schema.sql`
+- row-level security from `db/supabase-rls.sql`, with
+  jieshensherwinlee@gmail.com allow-listed
+- verified on the live project: anonymous visitors see 0 rows, the
+  owner sees everything, other signed-in users see 0 rows
+- Supabase's security advisor reports no issues
+
+The URL and publishable key are pre-filled in `.env.example`.
+
 **⚠️ One-time switch-over on your machine (not yet done):**
-1. Follow README.md → Getting started: create the Supabase project, fill
-   in `.env` (Supabase values plus `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
-   `OPENAI_API_KEY` and `SANITY_API_TOKEN`; these used to live in n8n
-   credentials), then run `setup_db` and add your login user.
+1. In Supabase: set a database password (Project Settings → Database →
+   Reset password), turn off new-user sign-ups, and add your login user
+   (Authentication → Users → Add user, auto-confirm). Copy `.env.example`
+   to `.env`, then fill in `DATABASE_URL` (Connect → Session pooler) and
+   the AI keys (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`,
+   `SANITY_API_TOKEN`; these used to live in n8n credentials). There's no
+   need to run `setup_db`, since it's already applied, though re-running
+   it is harmless.
 2. `docker start projectdigital_postgres`, then
    `python -m scripts.copy_data --from <old db url>`. This copies your jobs
    and images, and re-points any gate still waiting on n8n at the API.
@@ -249,7 +265,7 @@ added to match the live table), **`inspiration_items`**, **`guideline_items`**,
 ## Known issues / cleanup
 
 - **Not yet run against real APIs since the port** (see TL;DR).
-- **Supabase setup and the login are untested against a real Supabase project.** Tested on plain Postgres with a stand-in for Supabase's `auth` schema.
+- **The dashboard login and the Python API haven't talked to the real Supabase yet.** The schema and access rules are applied and verified on the live project. The data API and login have only been tested against a fake Supabase, because the build sandbox can't reach supabase.co.
 - `PendingImages` AI badge label says "Gemini Imagen 3"; it's Imagen 4. Cosmetic.
 - **Warm-films job stuck at `image`.** It errored before the Imagen-4 fix.
   On the API, set its status to `failed` and click **Retry step**, or delete it.

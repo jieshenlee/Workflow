@@ -25,7 +25,8 @@ def setup(conn: psycopg.Connection, owner_emails: list[str]) -> None:
     conn.execute((DB_DIR / "schema.sql").read_text())
     conn.execute((DB_DIR / "supabase-rls.sql").read_text())
     for email in owner_emails:
-        conn.execute("INSERT INTO dashboard_users (email) VALUES (%s) ON CONFLICT DO NOTHING", (email.strip().lower(),))
+        conn.execute("INSERT INTO private.dashboard_users (email) VALUES (%s) ON CONFLICT DO NOTHING",
+                     (email.strip().lower(),))
 
 
 def main() -> None:

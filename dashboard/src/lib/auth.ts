@@ -9,6 +9,28 @@ export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 export const supabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY)
 
+/** What's wrong with the Supabase settings in .env, or null if they look usable. */
+export const supabaseConfigError: string | null = (() => {
+  if (!supabaseConfigured) return null // handled as "not connected yet"
+  let url: URL
+  try {
+    url = new URL(SUPABASE_URL)
+  } catch {
+    return `VITE_SUPABASE_URL isn't a valid URL. It should look like https://<project-ref>.supabase.co`
+  }
+  if (url.username || url.password || url.protocol.startsWith('postgres')) {
+    return 'VITE_SUPABASE_URL contains a database connection string. That belongs in DATABASE_URL. ' +
+      'Set VITE_SUPABASE_URL to just https://<project-ref>.supabase.co (no password).'
+  }
+  if (url.protocol !== 'https:' && url.hostname !== 'localhost') {
+    return 'VITE_SUPABASE_URL should start with https://'
+  }
+  if (/^(postgres|sb_secret_)/.test(SUPABASE_ANON_KEY)) {
+    return 'VITE_SUPABASE_ANON_KEY must be the publishable key (sb_publishable_…), never a secret key or connection string.'
+  }
+  return null
+})()
+
 export interface Session {
   access_token: string
   refresh_token: string

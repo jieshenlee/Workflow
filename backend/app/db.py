@@ -26,6 +26,9 @@ def _get_pool() -> ConnectionPool:
     if _pool is None:
         if not settings.database_url:
             raise RuntimeError("DATABASE_URL is not set — add your Supabase connection string to .env")
+        if not settings.database_url.startswith(("postgresql://", "postgres://")):
+            raise RuntimeError("DATABASE_URL must be the postgresql://… Session pooler string from Supabase → Connect, "
+                               "not the https://….supabase.co URL (that one is VITE_SUPABASE_URL)")
         # prepare_threshold=None: Supabase's pooler can't share prepared statements across clients.
         _pool = ConnectionPool(settings.database_url, min_size=1, max_size=10, configure=_configure,
                                kwargs={"row_factory": dict_row, "prepare_threshold": None}, open=True)

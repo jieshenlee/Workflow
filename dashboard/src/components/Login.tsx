@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { signIn, supabaseConfigured } from '../lib/auth'
+import { signIn, supabaseConfigError, supabaseConfigured } from '../lib/auth'
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -30,6 +30,18 @@ export default function Login() {
           The dashboard isn't connected to Supabase yet. Add <span className="mono">VITE_SUPABASE_URL</span> and{' '}
           <span className="mono">VITE_SUPABASE_ANON_KEY</span> to the <span className="mono">.env</span> file in the
           project folder, then restart <span className="mono">npm run dev</span>.
+        </div>
+      </Shell>
+    )
+  }
+
+  if (supabaseConfigError) {
+    return (
+      <Shell>
+        <div style={{ fontSize: 13, color: 'var(--red)', lineHeight: 1.6 }}>{supabaseConfigError}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-2)' }}>
+          Fix it in the <span className="mono">.env</span> file in the project folder, then restart{' '}
+          <span className="mono">npm run dev</span>.
         </div>
       </Shell>
     )
